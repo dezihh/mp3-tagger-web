@@ -11,7 +11,8 @@
         {% for dir_path, files in results.items() %}
         <div class="directory-group">
             <div class="directory-header">
-                <h2>{{ dir_path }}</h2>
+                <h2>Verzeichnis: {{ dir_path }}</h2>
+                <p class="target-path-info"><strong>Zielpfad:</strong> {{ dir_path }}</p>
                 <label class="directory-checkbox">
                     <input type="checkbox" class="dir-checkbox" data-dir="{{ dir_path }}">
                     Alle markieren
@@ -21,29 +22,39 @@
             <table>
                 <thead>
                     <tr>
-                        <th>Dateiname</th>
-                        <th>Aktuelle ID3 Tags</th>
-                        <th>Vorgeschlagene Tags</th>
-                        <th>Zieldatei</th>
-                        <th class="compact">Aktion</th>
+                        <th class="compact">✓</th>
+                        <th class="filename-col">Dateiname</th>
+                        <th class="tag-col">Artist (aktuell)</th>
+                        <th class="tag-col">Title (aktuell)</th>
+                        <th class="tag-col">Album (aktuell)</th>
+                        <th class="cover-col">Cover</th>
+                        <th class="tag-col">Artist (neu)</th>
+                        <th class="tag-col">Title (neu)</th>
+                        <th class="tag-col">Album (neu)</th>
+                        <th class="cover-col">Cover</th>
+                        <th class="target-col">Ziel-Dateiname</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for file in files %}
                     <tr>
+                        <!-- Checkbox -->
+                        <td class="action-cell">
+                            <input type="checkbox" class="file-checkbox" 
+                                   data-file="{{ file.path }}"
+                                   {% if file.suggested_artist %}checked{% endif %}>
+                        </td>
+                        
                         <!-- Dateiname -->
-                        <td class="filename">{{ file.filename }}</td>
+                        <td class="filename" title="{{ file.filename }}">
+                            {{ file.filename|truncate(25, True, '...') }}
+                        </td>
                         
                         <!-- Aktuelle Tags -->
-                        <td class="tag-cell">
-                            <div class="tag-display">
-                                <div><span class="tag-label">Artist:</span> {{ file.current_artist or '-' }}</div>
-                                <div><span class="tag-label">Title:</span> {{ file.current_title or '-' }}</div>
-                                <div><span class="tag-label">Album:</span> {{ file.current_album or '-' }}</div>
-                                <div><span class="tag-label">Bild:</span> {{ 'Ja' if file.current_has_cover else 'Nein' }}</div>
-                            </div>
+                        <td class="tag-cell" title="{{ file.current_artist or 'Nicht vorhanden' }}">
+                            <div class="tag-content">{{ file.current_artist or '-' }}</div>
                             <div class="tag-tooltip">
-                                <h4>Vollständige Metadaten</h4>
+                                <h4>Vollständige aktuelle Metadaten</h4>
                                 <pre>{{ file.current_full_tags }}</pre>
                                 {% if file.current_has_cover %}
                                 <img src="data:image/jpeg;base64,{{ file.current_cover_preview }}" alt="Cover" class="cover-tooltip">
@@ -51,14 +62,51 @@
                             </div>
                         </td>
                         
-                        <!-- Vorgeschlagene Tags -->
-                        <td class="tag-cell">
-                            <div class="tag-display">
-                                <div><span class="tag-label">Artist:</span> {{ file.suggested_artist or '-' }}</div>
-                                <div><span class="tag-label">Title:</span> {{ file.suggested_title or '-' }}</div>
-                                <div><span class="tag-label">Album:</span> {{ file.suggested_album or '-' }}</div>
-                                <div><span class="tag-label">Bild:</span> {{ 'Ja' if file.suggested_cover_url else 'Nein' }}</div>
+                        <td class="tag-cell" title="{{ file.current_title or 'Nicht vorhanden' }}">
+                            <div class="tag-content">{{ file.current_title or '-' }}</div>
+                            <div class="tag-tooltip">
+                                <h4>Vollständige aktuelle Metadaten</h4>
+                                <pre>{{ file.current_full_tags }}</pre>
+                                {% if file.current_has_cover %}
+                                <img src="data:image/jpeg;base64,{{ file.current_cover_preview }}" alt="Cover" class="cover-tooltip">
+                                {% endif %}
                             </div>
+                        </td>
+                        
+                        <td class="tag-cell" title="{{ file.current_album or 'Nicht vorhanden' }}">
+                            <div class="tag-content">{{ file.current_album or '-' }}</div>
+                            <div class="tag-tooltip">
+                                <h4>Vollständige aktuelle Metadaten</h4>
+                                <pre>{{ file.current_full_tags }}</pre>
+                                {% if file.current_has_cover %}
+                                <img src="data:image/jpeg;base64,{{ file.current_cover_preview }}" alt="Cover" class="cover-tooltip">
+                                {% endif %}
+                            </div>
+                        </td>
+                        
+                        <!-- Aktuelles Cover -->
+                        <td class="cover-info" title="Cover-Details">
+                            <span class="cover-compact">{{ file.current_cover_compact }}</span>
+                            <div class="tag-tooltip">
+                                <h4>Cover-Informationen</h4>
+                                {% if file.current_cover_info %}
+                                    <p>Typ: {{ file.current_cover_info.type }}</p>
+                                    <p>Auflösung: {{ file.current_cover_info.resolution }}</p>
+                                    {% if file.current_cover_info.count > 1 %}
+                                        <p>Anzahl: {{ file.current_cover_info.count }}</p>
+                                    {% endif %}
+                                {% else %}
+                                    <p>Kein Cover gefunden</p>
+                                {% endif %}
+                                {% if file.current_cover_preview %}
+                                <img src="data:image/jpeg;base64,{{ file.current_cover_preview }}" alt="Cover" class="cover-tooltip">
+                                {% endif %}
+                            </div>
+                        </td>
+                        
+                        <!-- Vorgeschlagene Tags -->
+                        <td class="tag-cell" title="{{ file.suggested_artist or 'Nicht verfügbar' }}">
+                            <div class="tag-content">{{ file.suggested_artist or '-' }}</div>
                             <div class="tag-tooltip">
                                 <h4>Vorgeschlagene Metadaten</h4>
                                 <pre>{{ file.suggested_full_tags }}</pre>
@@ -68,16 +116,53 @@
                             </div>
                         </td>
                         
-                        <!-- Zieldatei -->
-                        <td class="target-path">
-                            {{ file.target_path }}
+                        <td class="tag-cell" title="{{ file.suggested_title or 'Nicht verfügbar' }}">
+                            <div class="tag-content">{{ file.suggested_title or '-' }}</div>
+                            <div class="tag-tooltip">
+                                <h4>Vorgeschlagene Metadaten</h4>
+                                <pre>{{ file.suggested_full_tags }}</pre>
+                                {% if file.suggested_cover_url %}
+                                <img src="{{ file.suggested_cover_url }}" alt="Cover" class="cover-tooltip">
+                                {% endif %}
+                            </div>
                         </td>
                         
-                        <!-- Aktion -->
-                        <td class="action-cell">
-                            <input type="checkbox" class="file-checkbox" 
-                                   data-file="{{ file.path }}"
-                                   {% if file.suggested_artist %}checked{% endif %}>
+                        <td class="tag-cell" title="{{ file.suggested_album or 'Nicht verfügbar' }}">
+                            <div class="tag-content">{{ file.suggested_album or '-' }}</div>
+                            <div class="tag-tooltip">
+                                <h4>Vorgeschlagene Metadaten</h4>
+                                <pre>{{ file.suggested_full_tags }}</pre>
+                                {% if file.suggested_cover_url %}
+                                <img src="{{ file.suggested_cover_url }}" alt="Cover" class="cover-tooltip">
+                                {% endif %}
+                            </div>
+                        </td>
+                        
+                        <!-- Vorgeschlagenes Cover -->
+                        <td class="cover-info" title="Vorgeschlagenes Cover">
+                            {% if file.suggested_cover_url %}
+                                <div class="cover-display">
+                                    <span class="cover-type">Online</span>
+                                    <span class="cover-resolution">?</span>
+                                </div>
+                            {% else %}
+                                <span class="no-cover">-</span>
+                            {% endif %}
+                            <div class="tag-tooltip">
+                                <h4>Vorgeschlagenes Cover</h4>
+                                {% if file.suggested_cover_url %}
+                                    <p>Typ: Online-Quelle</p>
+                                    <p>Auflösung: Unbekannt</p>
+                                    <img src="{{ file.suggested_cover_url }}" alt="Cover" class="cover-tooltip">
+                                {% else %}
+                                    <p>Kein Cover vorgeschlagen</p>
+                                {% endif %}
+                            </div>
+                        </td>
+                        
+                        <!-- Zieldatei -->
+                        <td class="target-path" title="{{ file.filename }}">
+                            {{ file.filename }}
                         </td>
                     </tr>
                     {% endfor %}

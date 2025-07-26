@@ -1,14 +1,9 @@
 body {
     font-family: Arial, sans-serif;
-    font-size: 14px;
+    font-size: 13px;
     margin: 0;
-    padding: 20px;
+    padding: 15px;
     background: #f5f5f5;
-}
-
-.container {
-    max-width: 1800px;
-    margin: 0 auto;
 }
 
 .directory-group {
@@ -40,42 +35,71 @@ body {
     gap: 8px;
 }
 
-table {
-    width: 100%;
-    border-collapse: collapse;
-}
-
 th, td {
-    padding: 8px 12px;
+    padding: 6px 8px;
     text-align: left;
     border-bottom: 1px solid #eee;
+    font-size: 13px;
+    vertical-align: top;
 }
 
 th {
     background: #ecf0f1;
     position: sticky;
     top: 0;
+    font-weight: bold;
+    font-size: 12px;
+}
+
+/* Spaltenbreiten */
+.filename-col {
+    width: 12%;
+    max-width: 140px;
+}
+
+.tag-col {
+    width: 10%;
+    max-width: 120px;
+}
+
+.cover-col {
+    width: 8%;
+    max-width: 80px;
+}
+
+.target-col {
+    width: 15%;
+    max-width: 180px;
+}
+
+.compact {
+    width: 4%;
+    max-width: 50px;
+    text-align: center;
+}
+
+.center {
+    text-align: center;
 }
 
 .filename {
-    max-width: 150px;
-    word-break: break-all;
+    max-width: 140px;
+    word-break: break-word;
+    font-size: 12px;
 }
 
 .tag-cell {
-    max-width: 200px;
+    max-width: 120px;
     position: relative;
+    padding: 4px 6px;
 }
 
-.tag-display {
-    display: grid;
-    grid-template-columns: 60px 1fr;
-    gap: 4px;
-}
-
-.tag-label {
-    font-weight: bold;
-    color: #7f8c8d;
+.tag-content {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 12px;
 }
 
 .tag-tooltip {
@@ -90,6 +114,8 @@ th {
     left: 50%;
     transform: translateX(-50%);
     top: 100%;
+    max-height: 300px;
+    overflow-y: auto;
 }
 
 .tag-cell:hover .tag-tooltip {
@@ -103,10 +129,10 @@ th {
 }
 
 .target-path {
-    max-width: 200px;
+    max-width: 180px;
     word-break: break-all;
     font-family: monospace;
-    font-size: 13px;
+    font-size: 11px;
 }
 
 .action-cell {
@@ -114,7 +140,90 @@ th {
 }
 
 .compact {
-    width: 50px;
+    width: 4%;
+    max-width: 50px;
+    text-align: center;
+}
+
+/* Responsive Tabelle */
+table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+    font-size: 12px;
+}
+
+/* Scroll für sehr breite Tabellen */
+.directory-group {
+    background: white;
+    margin-bottom: 20px;
+    border-radius: 5px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    overflow: hidden;
+    overflow-x: auto;
+}
+
+/* Verbesserte Checkbox-Darstellung */
+input[type="checkbox"] {
+    transform: scale(1.2);
+    cursor: pointer;
+    margin: 0;
+}
+
+/* Kompakte Zeilenabstände */
+tbody tr {
+    height: 28px;
+}
+
+tbody tr:hover {
+    background-color: #f8f9fa;
+}
+
+/* Bessere Textdarstellung für lange Inhalte */
+.tag-content:hover {
+    background-color: #fff3cd;
+    cursor: help;
+}
+
+/* Container-Anpassungen für mehr Platz */
+.container {
+    max-width: 1900px;
+    margin: 0 auto;
+    padding: 15px;
+}
+
+/* Cover-Info Styling */
+.cover-info {
+    font-size: 11px;
+    text-align: center;
+    position: relative;
+}
+
+.cover-display {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1px;
+}
+
+.cover-type {
+    font-weight: bold;
+    color: #2c3e50;
+}
+
+.cover-resolution {
+    color: #7f8c8d;
+    font-size: 10px;
+}
+
+.cover-count {
+    color: #e67e22;
+    font-size: 9px;
+}
+
+.no-cover {
+    color: #bdc3c7;
+    font-style: italic;
 }
 
 .actions {
