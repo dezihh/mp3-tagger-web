@@ -25,13 +25,15 @@ def process(directory):
         tagger = MusicTagger()
         files_data = tagger.scan_directory(full_path)
         print(f"DEBUG: Gefundene Dateien: {len(files_data)}")
-        for file_data in files_data[:2]:  # Zeige nur die ersten 2 für Debug
-            print(f"DEBUG: Datei: {file_data}")
         
-        results = tagger.get_metadata_for_files(files_data)
-        print(f"DEBUG: Verarbeitete Ergebnisse: {len(results)}")
+        # Hole erweiterte Metadaten für alle Dateien
+        enhanced_files = tagger.get_metadata_for_files(files_data)
+        print(f"DEBUG: Verarbeitete Ergebnisse: {len(enhanced_files)}")
         
-        grouped_results = group_by_directory(results)
+        for file_data in enhanced_files[:2]:  # Zeige nur die ersten 2 für Debug
+            print(f"DEBUG: Erweiterte Datei: {file_data.get('suggested_artist', 'None')} - {file_data.get('suggested_title', 'None')}")
+        
+        grouped_results = group_by_directory(enhanced_files)
         print(f"DEBUG: Gruppierte Ergebnisse: {list(grouped_results.keys())}")
         
         return render_template('results.html', 

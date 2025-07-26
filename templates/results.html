@@ -27,10 +27,12 @@
                         <th class="tag-col">Artist (aktuell)</th>
                         <th class="tag-col">Title (aktuell)</th>
                         <th class="tag-col">Album (aktuell)</th>
+                        <th class="tag-col">Genre (aktuell)</th>
                         <th class="cover-col">Cover</th>
                         <th class="tag-col">Artist (neu)</th>
                         <th class="tag-col">Title (neu)</th>
                         <th class="tag-col">Album (neu)</th>
+                        <th class="tag-col">Genre (neu)</th>
                         <th class="cover-col">Cover</th>
                         <th class="target-col">Ziel-Dateiname</th>
                     </tr>
@@ -75,6 +77,17 @@
                         
                         <td class="tag-cell" title="{{ file.current_album or 'Nicht vorhanden' }}">
                             <div class="tag-content">{{ file.current_album or '-' }}</div>
+                            <div class="tag-tooltip">
+                                <h4>Vollständige aktuelle Metadaten</h4>
+                                <pre>{{ file.current_full_tags }}</pre>
+                                {% if file.current_has_cover %}
+                                <img src="data:image/jpeg;base64,{{ file.current_cover_preview }}" alt="Cover" class="cover-tooltip">
+                                {% endif %}
+                            </div>
+                        </td>
+                        
+                        <td class="tag-cell" title="{{ file.current_genre or 'Nicht vorhanden' }}">
+                            <div class="tag-content">{{ file.current_genre or '-' }}</div>
                             <div class="tag-tooltip">
                                 <h4>Vollständige aktuelle Metadaten</h4>
                                 <pre>{{ file.current_full_tags }}</pre>
@@ -138,12 +151,27 @@
                             </div>
                         </td>
                         
+                        <td class="tag-cell" title="{{ file.suggested_genre or 'Nicht verfügbar' }}">
+                            <div class="tag-content">{{ file.suggested_genre or '-' }}</div>
+                            <div class="tag-tooltip">
+                                <h4>Vorgeschlagene Metadaten</h4>
+                                <pre>{{ file.suggested_full_tags }}</pre>
+                                {% if file.suggested_cover_url %}
+                                <img src="{{ file.suggested_cover_url }}" alt="Cover" class="cover-tooltip">
+                                {% endif %}
+                            </div>
+                        </td>
+                        
                         <!-- Vorgeschlagenes Cover -->
                         <td class="cover-info" title="Vorgeschlagenes Cover">
                             {% if file.suggested_cover_url %}
                                 <div class="cover-display">
                                     <span class="cover-type">Online</span>
-                                    <span class="cover-resolution">?</span>
+                                    {% if file.online_metadata and file.online_metadata.source %}
+                                        <span class="cover-resolution">{{ file.online_metadata.source }}</span>
+                                    {% else %}
+                                        <span class="cover-resolution">?</span>
+                                    {% endif %}
                                 </div>
                             {% else %}
                                 <span class="no-cover">-</span>
@@ -151,8 +179,15 @@
                             <div class="tag-tooltip">
                                 <h4>Vorgeschlagenes Cover</h4>
                                 {% if file.suggested_cover_url %}
-                                    <p>Typ: Online-Quelle</p>
-                                    <p>Auflösung: Unbekannt</p>
+                                    {% if file.online_metadata and file.online_metadata.source %}
+                                        <p>Quelle: {{ file.online_metadata.source }}</p>
+                                        <p>Vertrauen: {{ "%.0f"|format(file.online_metadata.confidence * 100) }}%</p>
+                                    {% else %}
+                                        <p>Typ: Online-Quelle</p>
+                                    {% endif %}
+                                    {% if file.online_metadata and file.online_metadata.musicbrainz_recording_id %}
+                                        <p>MusicBrainz ID: {{ file.online_metadata.musicbrainz_recording_id[:8] }}...</p>
+                                    {% endif %}
                                     <img src="{{ file.suggested_cover_url }}" alt="Cover" class="cover-tooltip">
                                 {% else %}
                                     <p>Kein Cover vorgeschlagen</p>

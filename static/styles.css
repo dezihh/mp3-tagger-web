@@ -104,18 +104,56 @@ th {
 
 .tag-tooltip {
     display: none;
-    position: absolute;
-    z-index: 100;
-    background: white;
-    border: 1px solid #ddd;
+    position: fixed;  /* Statt absolute - damit es nicht durch Tabelle beschränkt wird */
+    z-index: 1000;    /* Höherer z-index */
+    background: #ffffff;
+    border: 1px solid #ccc;
     padding: 15px;
-    width: 400px;
-    box-shadow: 0 3px 10px rgba(0,0,0,0.2);
-    left: 50%;
-    transform: translateX(-50%);
-    top: 100%;
-    max-height: 300px;
+    width: 450px;     /* Etwas breiter */
+    box-shadow: 0 5px 20px rgba(0,0,0,0.25);  /* Stärkerer Schatten */
+    border-radius: 8px;
+    max-height: 400px;  /* Höher */
     overflow-y: auto;
+    font-size: 13px;
+    line-height: 1.4;
+    /* Smooth Transition */
+    opacity: 0;
+    transition: opacity 0.2s ease-in-out;
+    pointer-events: none; /* Verhindert Interferenz mit Mausevents */
+}
+
+/* Tooltip sichtbar machen */
+.tag-cell:hover .tag-tooltip,
+.cover-info:hover .tag-tooltip {
+    opacity: 1;
+}
+
+/* Tooltip-Header Styling */
+.tag-tooltip h4 {
+    margin: 0 0 10px 0;
+    padding: 0 0 8px 0;
+    border-bottom: 2px solid #3498db;
+    color: #2c3e50;
+    font-size: 14px;
+    font-weight: bold;
+}
+
+/* Tooltip-Inhalt */
+.tag-tooltip pre {
+    background: #f8f9fa;
+    padding: 10px;
+    border-radius: 4px;
+    margin: 8px 0;
+    font-size: 12px;
+    line-height: 1.3;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+}
+
+/* Tooltip-Paragraphen */
+.tag-tooltip p {
+    margin: 5px 0;
+    color: #34495e;
 }
 
 .tag-cell:hover .tag-tooltip {
@@ -244,4 +282,65 @@ tbody tr:hover {
 input[type="checkbox"] {
     transform: scale(1.3);
     cursor: pointer;
+}
+
+/* Erweiterte Metadaten-Anzeige */
+.metadata-enhanced .tag-tooltip h4 {
+    color: #27ae60;
+    border-bottom: 1px solid #27ae60;
+    padding-bottom: 3px;
+    margin-bottom: 8px;
+}
+
+.metadata-enhanced .metadata-ids {
+    background: #f8f9fa;
+    padding: 5px;
+    margin: 5px 0;
+    border-radius: 3px;
+    font-size: 11px;
+    color: #666;
+}
+
+.metadata-enhanced .metadata-source {
+    display: inline-block;
+    background: #3498db;
+    color: white;
+    padding: 2px 6px;
+    border-radius: 10px;
+    font-size: 10px;
+    margin-bottom: 5px;
+}
+
+.metadata-enhanced .confidence-high {
+    background: #27ae60;
+}
+
+.metadata-enhanced .confidence-medium {
+    background: #f39c12;
+}
+
+.metadata-enhanced .confidence-low {
+    background: #e74c3c;
+}
+
+/* Online Cover Anzeige */
+.cover-display .cover-resolution {
+    font-size: 10px;
+    opacity: 0.8;
+}
+
+/* Genres-Anzeige */
+.genres-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 3px;
+    margin-top: 5px;
+}
+
+.genre-tag {
+    background: #ecf0f1;
+    padding: 1px 4px;
+    border-radius: 8px;
+    font-size: 10px;
+    color: #2c3e50;
 }

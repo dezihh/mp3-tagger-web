@@ -209,3 +209,9 @@ __marimo__/
 # Project specific
 config.ini
 test_music/
+
+# Test and Debug files
+test_*.py
+debug_*.py
+*_test.py
+*_debug.py

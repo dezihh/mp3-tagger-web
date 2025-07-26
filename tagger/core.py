@@ -8,6 +8,7 @@ import logging
 import base64
 from collections import defaultdict
 import re
+from .online_metadata import OnlineMetadataProvider
 
 logging.basicConfig(
     level=logging.INFO,
@@ -20,6 +21,8 @@ class MusicTagger:
         self.discogs_key = os.getenv('DISCOGS_API_KEY')
         self.discogs_secret = os.getenv('DISCOGS_API_SECRET')
         self.min_confidence = 0.6
+        # Initialisiere Online-Metadata-Provider
+        self.online_provider = OnlineMetadataProvider()
 
     def scan_directory(self, directory):
         files = []
@@ -38,6 +41,7 @@ class MusicTagger:
                         'current_artist': audio.tag.artist,
                         'current_title': audio.tag.title,
                         'current_album': audio.tag.album,
+                        'current_genre': audio.tag.genre.name if audio.tag.genre else None,
                         'current_has_cover': self._has_cover(audio),
                         'current_cover_info': self._get_cover_info(audio),
                         'current_cover_compact': self._get_cover_compact_info(audio),
@@ -46,6 +50,7 @@ class MusicTagger:
                         'suggested_artist': None,
                         'suggested_title': None,
                         'suggested_album': None,
+                        'suggested_genre': None,
                         'suggested_cover_url': None,
                         'suggested_full_tags': None
                     }
@@ -57,29 +62,100 @@ class MusicTagger:
         return files
 
     def get_metadata_for_files(self, files_data):
+        """Erweiterte Metadatenabfrage mit Online-Diensten"""
         results = []
+        
         for file_data in files_data:
             try:
-                artist, title = self._parse_filename(file_data['filename'])
-                online_meta = self._query_online_metadata(
-                    artist or file_data['current_artist'],
-                    title or file_data['current_title'],
-                    file_data['current_album']
+                # Prüfe ob Online-Suche sinnvoll ist
+                # Suche für alle Dateien, aber priorisiere die mit fehlenden Daten
+                has_basic_info = (
+                    file_data['current_artist'] and 
+                    file_data['current_title']
                 )
-
-                if online_meta:
-                    file_data.update({
-                        'suggested_artist': online_meta.get('artist'),
-                        'suggested_title': online_meta.get('title'),
-                        'suggested_album': online_meta.get('album'),
-                        'suggested_cover_url': online_meta.get('cover_url'),
-                        'suggested_full_tags': self._format_suggested_tags(online_meta)
-                    })
+                
+                if has_basic_info:
+                    logging.info(f"Suche erweiterte Online-Metadaten für: {file_data['filename']}")
+                    
+                    # Verwende neuen Online-Provider
+                    online_meta = self.online_provider.search_metadata(
+                        filename=file_data['filename'],
+                        current_artist=file_data['current_artist'],
+                        current_title=file_data['current_title'],
+                        current_album=file_data['current_album']
+                    )
+                    
+                    if online_meta and online_meta['confidence'] > 0.3:  # Niedrigere Schwelle
+                        # Erstelle erweiterte Metadaten-Anzeige
+                        suggested_tags = self._format_enhanced_suggested_tags(online_meta)
+                        
+                        file_data.update({
+                            'suggested_artist': online_meta.get('artist'),
+                            'suggested_title': online_meta.get('title'),
+                            'suggested_album': online_meta.get('album'),
+                            'suggested_genre': online_meta.get('genre'),
+                            'suggested_cover_url': online_meta.get('cover_url'),
+                            'suggested_full_tags': suggested_tags,
+                            'online_metadata': online_meta  # Vollständige Metadaten für erweiterte Anzeige
+                        })
+                        
+                        logging.info(f"✓ Metadaten gesetzt: {online_meta.get('artist')} - {online_meta.get('title')} via {online_meta['source']} (Vertrauen: {online_meta['confidence']:.2f})")
+                    else:
+                        if online_meta:
+                            logging.warning(f"✗ Niedrige Konfidenz ({online_meta['confidence']:.2f}) für: {file_data['filename']}")
+                        else:
+                            logging.warning(f"✗ Keine Online-Metadaten für: {file_data['filename']}")
+                else:
+                    logging.warning(f"⚠ Überspringe {file_data['filename']} - fehlende Basis-Infos (Artist: {bool(file_data['current_artist'])}, Title: {bool(file_data['current_title'])})")
+                
                 results.append(file_data)
+                
             except Exception as e:
                 logging.error(f"Metadatenabfrage fehlgeschlagen für {file_data['filename']}: {str(e)}")
                 results.append(file_data)
+        
         return results
+
+    def _format_enhanced_suggested_tags(self, online_meta):
+        """Formatiert erweiterte Online-Metadaten für die Anzeige"""
+        tags = []
+        
+        # Basis-Informationen
+        if online_meta.get('artist'):
+            tags.append(f"Artist: {online_meta['artist']}")
+        if online_meta.get('title'):
+            tags.append(f"Title: {online_meta['title']}")
+        if online_meta.get('album'):
+            tags.append(f"Album: {online_meta['album']}")
+        if online_meta.get('year'):
+            tags.append(f"Year: {online_meta['year']}")
+        
+        # Erweiterte Metadaten
+        if online_meta.get('track_number'):
+            tags.append(f"Track: {online_meta['track_number']}")
+        if online_meta.get('total_tracks'):
+            tags.append(f"Total Tracks: {online_meta['total_tracks']}")
+        
+        # Eindeutige IDs
+        if online_meta.get('musicbrainz_recording_id'):
+            tags.append(f"MusicBrainz Recording ID: {online_meta['musicbrainz_recording_id']}")
+        if online_meta.get('musicbrainz_artist_id'):
+            tags.append(f"MusicBrainz Artist ID: {online_meta['musicbrainz_artist_id']}")
+        if online_meta.get('musicbrainz_release_id'):
+            tags.append(f"MusicBrainz Release ID: {online_meta['musicbrainz_release_id']}")
+        
+        # Genres
+        if online_meta.get('genre'):
+            tags.append(f"Genre: {online_meta['genre']}")
+        if online_meta.get('additional_genres'):
+            additional = ', '.join(online_meta['additional_genres'])
+            tags.append(f"Additional Genres: {additional}")
+        
+        # Metainformationen
+        tags.append(f"Source: {online_meta.get('source', 'Unknown')}")
+        tags.append(f"Confidence: {online_meta.get('confidence', 0.0):.1%}")
+        
+        return '\n'.join(tags)
 
     def _has_cover(self, audio):
         """Prüft ob eine MP3-Datei ein Cover-Bild hat (eingebettet oder extern)"""
@@ -460,46 +536,6 @@ class MusicTagger:
         
         # Fallback: Verwende den ganzen Namen als Title
         return None, name
-
-    def _query_online_metadata(self, artist, title, album=None):
-        """Fragt Online-Dienste nach Metadaten ab"""
-        if not artist or not title:
-            return None
-        
-        # Vereinfachte Simulation - in der Realität würde hier eine API-Abfrage stattfinden
-        # Da keine API-Keys vorhanden sind, erstellen wir Mock-Daten
-        try:
-            # Simuliere eine verbesserte Version der vorhandenen Daten
-            return {
-                'artist': artist.title() if artist else None,
-                'title': title.title() if title else None,
-                'album': album.title() if album else f"Album von {artist}",
-                'cover_url': None,  # Keine Cover-URLs ohne echte API
-                'year': None,
-                'genre': None
-            }
-        except Exception as e:
-            logging.error(f"Online-Metadatenabfrage fehlgeschlagen: {str(e)}")
-            return None
-
-    def _format_suggested_tags(self, metadata):
-        """Formatiert die vorgeschlagenen Metadaten für die Anzeige"""
-        if not metadata:
-            return "Keine Vorschläge verfügbar"
-        
-        tags = []
-        if metadata.get('artist'):
-            tags.append(f"Artist: {metadata['artist']}")
-        if metadata.get('title'):
-            tags.append(f"Title: {metadata['title']}")
-        if metadata.get('album'):
-            tags.append(f"Album: {metadata['album']}")
-        if metadata.get('year'):
-            tags.append(f"Year: {metadata['year']}")
-        if metadata.get('genre'):
-            tags.append(f"Genre: {metadata['genre']}")
-        
-        return "\n".join(tags) if tags else "Keine Vorschläge verfügbar"
 
 def group_by_directory(files_data):
     grouped = defaultdict(list)

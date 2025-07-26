@@ -40,13 +40,24 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // Tooltip-Funktionalität für Tag-Zellen
-    const tagCells = document.querySelectorAll('.tag-cell');
+    // Tooltip-Funktionalität für Tag-Zellen mit dynamischer Positionierung
+    const tagCells = document.querySelectorAll('.tag-cell, .cover-info');
+    
     tagCells.forEach(function(cell) {
-        cell.addEventListener('mouseenter', function() {
+        cell.addEventListener('mouseenter', function(event) {
             const tooltip = this.querySelector('.tag-tooltip');
             if (tooltip) {
                 tooltip.style.display = 'block';
+                
+                // Dynamische Positionierung basierend auf Mausposition
+                positionTooltip(tooltip, event);
+            }
+        });
+        
+        cell.addEventListener('mousemove', function(event) {
+            const tooltip = this.querySelector('.tag-tooltip');
+            if (tooltip && tooltip.style.display === 'block') {
+                positionTooltip(tooltip, event);
             }
         });
         
@@ -57,4 +68,31 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
     });
+    
+    // Funktion zur dynamischen Tooltip-Positionierung
+    function positionTooltip(tooltip, event) {
+        const tooltipRect = tooltip.getBoundingClientRect();
+        const viewportWidth = window.innerWidth;
+        const viewportHeight = window.innerHeight;
+        
+        let left = event.clientX + 15; // 15px Abstand zur Maus
+        let top = event.clientY + 15;
+        
+        // Prüfe ob Tooltip rechts aus dem Viewport rausgeht
+        if (left + tooltipRect.width > viewportWidth) {
+            left = event.clientX - tooltipRect.width - 15;
+        }
+        
+        // Prüfe ob Tooltip unten aus dem Viewport rausgeht
+        if (top + tooltipRect.height > viewportHeight) {
+            top = event.clientY - tooltipRect.height - 15;
+        }
+        
+        // Stelle sicher, dass Tooltip nicht außerhalb des Viewports ist
+        left = Math.max(10, Math.min(left, viewportWidth - tooltipRect.width - 10));
+        top = Math.max(10, Math.min(top, viewportHeight - tooltipRect.height - 10));
+        
+        tooltip.style.left = left + 'px';
+        tooltip.style.top = top + 'px';
+    }
 });
