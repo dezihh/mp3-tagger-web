@@ -33,6 +33,7 @@
                         <th class="tag-col">Title (neu)</th>
                         <th class="tag-col">Album (neu)</th>
                         <th class="tag-col">Genre (neu)</th>
+                        <th class="classification-col">Klassifizierung</th>
                         <th class="cover-col">Cover</th>
                         <th class="target-col">Ziel-Dateiname</th>
                     </tr>
@@ -158,6 +159,50 @@
                                 <pre>{{ file.suggested_full_tags }}</pre>
                                 {% if file.suggested_cover_url %}
                                 <img src="{{ file.suggested_cover_url }}" alt="Cover" class="cover-tooltip">
+                                {% endif %}
+                            </div>
+                        </td>
+                        
+                        <!-- Erweiterte Klassifizierung -->
+                        <td class="classification-cell" title="Erweiterte Klassifizierung">
+                            {% if file.online_metadata %}
+                                <div class="classification-content">
+                                    {% if file.online_metadata.era %}
+                                        <span class="class-era">{{ file.online_metadata.era }}</span>
+                                    {% endif %}
+                                    {% if file.online_metadata.mood and file.online_metadata.mood|length > 0 %}
+                                        <span class="class-mood">{{ file.online_metadata.mood|join(", ") }}</span>
+                                    {% endif %}
+                                </div>
+                            {% else %}
+                                <span class="no-classification">-</span>
+                            {% endif %}
+                            <div class="tag-tooltip">
+                                <h4>Musikalische Klassifizierung</h4>
+                                {% if file.online_metadata %}
+                                    {% if file.online_metadata.era %}
+                                        <p><strong>Ära:</strong> {{ file.online_metadata.era }}</p>
+                                    {% endif %}
+                                    {% if file.online_metadata.mood and file.online_metadata.mood|length > 0 %}
+                                        <p><strong>Stimmung:</strong> {{ file.online_metadata.mood|join(", ") }}</p>
+                                    {% endif %}
+                                    {% if file.online_metadata.style and file.online_metadata.style|length > 0 %}
+                                        <p><strong>Stil:</strong> {{ file.online_metadata.style|join(", ") }}</p>
+                                    {% endif %}
+                                    {% if file.online_metadata.similar_artists and file.online_metadata.similar_artists|length > 0 %}
+                                        <p><strong>Ähnlich:</strong> {{ file.online_metadata.similar_artists|join(", ") }}</p>
+                                    {% endif %}
+                                    {% if file.online_metadata.instrumentation and file.online_metadata.instrumentation|length > 0 %}
+                                        <p><strong>Instrumentierung:</strong> {{ file.online_metadata.instrumentation|join(", ") }}</p>
+                                    {% endif %}
+                                    {% if file.online_metadata.energy_level %}
+                                        <p><strong>Energie:</strong> {{ file.online_metadata.energy_level }}</p>
+                                    {% endif %}
+                                    {% if file.online_metadata.tempo_description %}
+                                        <p><strong>Tempo:</strong> {{ file.online_metadata.tempo_description }}</p>
+                                    {% endif %}
+                                {% else %}
+                                    <p>Keine Klassifizierung verfügbar</p>
                                 {% endif %}
                             </div>
                         </td>

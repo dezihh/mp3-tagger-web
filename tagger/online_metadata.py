@@ -275,6 +275,9 @@ class OnlineMetadataProvider:
                     import traceback
                     self.logger.error(traceback.format_exc())
                 
+                # Erweiterte Klassifizierung basierend auf Tags
+                classification = self._classify_musical_attributes(genres, best_match)
+                
                 result_data = {
                     'artist': best_match.get('artist-credit', [{}])[0].get('artist', {}).get('name'),
                     'title': best_match.get('title'),
@@ -286,7 +289,15 @@ class OnlineMetadataProvider:
                     'musicbrainz_recording_id': best_match.get('id'),
                     'musicbrainz_artist_id': best_match.get('artist-credit', [{}])[0].get('artist', {}).get('id'),
                     'musicbrainz_release_id': best_match.get('release-list', [{}])[0].get('id') if best_match.get('release-list') else None,
-                    'confidence': confidence
+                    'confidence': confidence,
+                    # Erweiterte Klassifizierung
+                    'era': classification.get('era'),
+                    'mood': classification.get('mood'),
+                    'style': classification.get('style'),
+                    'similar_artists': classification.get('similar_artists'),
+                    'instrumentation': classification.get('instrumentation'),
+                    'energy_level': classification.get('energy_level'),
+                    'tempo_description': classification.get('tempo_description')
                 }
                 
                 self.logger.info(f"MusicBrainz Ergebnis: Confidence={confidence:.2f}, Artist={result_data['artist']}, Genres={len(genres)}, Cover={cover_url is not None}")
@@ -332,13 +343,24 @@ class OnlineMetadataProvider:
                 except:
                     pass
                 
+                # Erweiterte Klassifizierung für Last.fm
+                classification = self._classify_musical_attributes(top_tags, {'year': None})
+                
                 return {
                     'artist': track_info['artist'],
                     'title': track_info['title'],
                     'album': track_info.get('album'),
                     'additional_genres': top_tags,
                     'cover_url': cover_url,
-                    'confidence': confidence
+                    'confidence': confidence,
+                    # Erweiterte Klassifizierung
+                    'era': classification.get('era'),
+                    'mood': classification.get('mood'),
+                    'style': classification.get('style'),
+                    'similar_artists': classification.get('similar_artists'),
+                    'instrumentation': classification.get('instrumentation'),
+                    'energy_level': classification.get('energy_level'),
+                    'tempo_description': classification.get('tempo_description')
                 }
                 
         except Exception as e:
@@ -380,6 +402,9 @@ class OnlineMetadataProvider:
                     if hasattr(release, 'images') and release.images:
                         cover_url = release.images[0]['uri']
                     
+                    # Erweiterte Klassifizierung für Discogs
+                    classification = self._classify_musical_attributes(genres, {'year': release.year if hasattr(release, 'year') else None})
+                    
                     return {
                         'artist': release.artists[0].name if release.artists else None,
                         'title': best_match.title,
@@ -387,7 +412,15 @@ class OnlineMetadataProvider:
                         'year': release.year if hasattr(release, 'year') else None,
                         'additional_genres': genres,
                         'cover_url': cover_url,
-                        'confidence': confidence
+                        'confidence': confidence,
+                        # Erweiterte Klassifizierung
+                        'era': classification.get('era'),
+                        'mood': classification.get('mood'),
+                        'style': classification.get('style'),
+                        'similar_artists': classification.get('similar_artists'),
+                        'instrumentation': classification.get('instrumentation'),
+                        'energy_level': classification.get('energy_level'),
+                        'tempo_description': classification.get('tempo_description')
                     }
                     
                 except Exception as e:
@@ -455,3 +488,157 @@ class OnlineMetadataProvider:
         except Exception as e:
             self.logger.error(f"Cover-Download fehlgeschlagen: {e}")
             return None
+    
+    def _classify_musical_attributes(self, genres, musicbrainz_data):
+        """Klassifiziert erweiterte musikalische Eigenschaften basierend auf Genres und Metadaten"""
+        classification = {
+            'era': None,
+            'mood': [],
+            'style': [],
+            'similar_artists': [],
+            'instrumentation': [],
+            'energy_level': None,
+            'tempo_description': None
+        }
+        
+        # Kombiniere alle verfügbaren Tags für die Analyse
+        all_tags = genres.copy() if genres else []
+        
+        # Zeitliche Einordnung basierend auf Jahr und Genre
+        year = self._extract_year_from_mb(musicbrainz_data)
+        if year:
+            if year < 1960:
+                classification['era'] = "Pre-60s"
+            elif year < 1970:
+                classification['era'] = "60s"
+            elif year < 1980:
+                classification['era'] = "70s"
+            elif year < 1990:
+                classification['era'] = "80s"
+            elif year < 2000:
+                classification['era'] = "90s"
+            elif year < 2010:
+                classification['era'] = "2000s"
+            elif year < 2020:
+                classification['era'] = "2010s"
+            else:
+                classification['era'] = "2020s+"
+        
+        # Stimmung/Atmosphäre basierend auf Genre-Keywords
+        mood_keywords = {
+            'energetic': ['punk', 'thrash', 'speed', 'power', 'upbeat', 'dance', 'electronic', 'disco'],
+            'melancholic': ['blues', 'sad', 'melancholy', 'depressive', 'doom', 'gothic'],
+            'aggressive': ['metal', 'hardcore', 'death', 'black', 'extreme', 'brutal', 'violent'],
+            'peaceful': ['ambient', 'chill', 'relaxing', 'meditative', 'new age', 'acoustic'],
+            'romantic': ['love', 'romantic', 'ballad', 'soft', 'tender'],
+            'rebellious': ['punk', 'alternative', 'grunge', 'protest', 'rebel'],
+            'nostalgic': ['classic', 'vintage', 'retro', 'oldies'],
+            'spiritual': ['gospel', 'christian', 'religious', 'spiritual', 'sacred'],
+            'playful': ['novelty', 'comedy', 'fun', 'party', 'silly'],
+            'dark': ['dark', 'gothic', 'black', 'doom', 'death', 'horror']
+        }
+        
+        for mood, keywords in mood_keywords.items():
+            for keyword in keywords:
+                if any(keyword.lower() in tag.lower() for tag in all_tags):
+                    if mood not in classification['mood']:
+                        classification['mood'].append(mood)
+        
+        # Stilistische Klassifizierung
+        style_keywords = {
+            'progressive': ['progressive', 'prog', 'complex', 'experimental'],
+            'acoustic': ['acoustic', 'unplugged', 'folk', 'singer-songwriter'],
+            'electronic': ['electronic', 'synth', 'techno', 'house', 'edm', 'electro'],
+            'orchestral': ['orchestral', 'symphonic', 'classical', 'chamber'],
+            'minimalist': ['minimal', 'simple', 'stripped'],
+            'fusion': ['fusion', 'crossover', 'mixed'],
+            'traditional': ['traditional', 'classic', 'standard', 'conventional'],
+            'avant-garde': ['avant-garde', 'experimental', 'abstract', 'unconventional'],
+            'psychedelic': ['psychedelic', 'psych', 'trippy', 'surreal'],
+            'garage': ['garage', 'lo-fi', 'raw', 'underground']
+        }
+        
+        for style, keywords in style_keywords.items():
+            for keyword in keywords:
+                if any(keyword.lower() in tag.lower() for tag in all_tags):
+                    if style not in classification['style']:
+                        classification['style'].append(style)
+        
+        # Instrumentierung basierend auf Genre
+        instrumentation_keywords = {
+            'guitar-driven': ['rock', 'metal', 'punk', 'grunge', 'blues', 'country'],
+            'piano-based': ['piano', 'classical', 'jazz', 'ballad', 'singer-songwriter'],
+            'electronic': ['electronic', 'synth', 'techno', 'house', 'ambient'],
+            'orchestral': ['classical', 'symphonic', 'orchestral', 'chamber'],
+            'vocal-focused': ['vocal', 'a cappella', 'choir', 'opera'],
+            'percussion-heavy': ['drum', 'tribal', 'afro', 'latin', 'world'],
+            'brass-section': ['jazz', 'big band', 'ska', 'swing', 'dixieland'],
+            'string-quartet': ['classical', 'chamber', 'string', 'quartet']
+        }
+        
+        for instr, keywords in instrumentation_keywords.items():
+            for keyword in keywords:
+                if any(keyword.lower() in tag.lower() for tag in all_tags):
+                    if instr not in classification['instrumentation']:
+                        classification['instrumentation'].append(instr)
+        
+        # Energy Level basierend auf Genre
+        energy_mapping = {
+            'high': ['punk', 'metal', 'hardcore', 'dance', 'electronic', 'thrash', 'speed'],
+            'medium': ['rock', 'pop', 'alternative', 'indie', 'funk', 'r&b'],
+            'low': ['ambient', 'classical', 'folk', 'acoustic', 'ballad', 'new age']
+        }
+        
+        for energy, keywords in energy_mapping.items():
+            for keyword in keywords:
+                if any(keyword.lower() in tag.lower() for tag in all_tags):
+                    classification['energy_level'] = energy
+                    break
+            if classification['energy_level']:
+                break
+        
+        # Tempo-Beschreibung basierend auf Genre
+        tempo_mapping = {
+            'very fast': ['thrash', 'speed', 'punk', 'hardcore'],
+            'fast': ['rock', 'metal', 'dance', 'electronic'],
+            'moderate': ['pop', 'alternative', 'indie', 'folk'],
+            'slow': ['ballad', 'blues', 'ambient', 'classical'],
+            'very slow': ['doom', 'funeral', 'drone']
+        }
+        
+        for tempo, keywords in tempo_mapping.items():
+            for keyword in keywords:
+                if any(keyword.lower() in tag.lower() for tag in all_tags):
+                    classification['tempo_description'] = tempo
+                    break
+            if classification['tempo_description']:
+                break
+        
+        # Künstler-Ähnlichkeiten basierend auf Genre (erweitert werden kann)
+        similarity_mapping = {
+            'beatles': ['british invasion', 'merseybeat', '60s pop'],
+            'queen': ['arena rock', 'theatrical rock', 'opera rock'],
+            'led zeppelin': ['hard rock', 'blues rock', 'heavy metal'],
+            'pink floyd': ['progressive rock', 'psychedelic', 'concept album'],
+            'metallica': ['thrash metal', 'heavy metal', 'speed metal'],
+            'elvis presley': ['rockabilly', '50s rock', 'classic rock'],
+            'bob dylan': ['folk rock', 'protest song', 'singer-songwriter'],
+            'david bowie': ['glam rock', 'art rock', 'experimental'],
+            'michael jackson': ['pop', 'r&b', 'dance-pop'],
+            'nirvana': ['grunge', 'alternative rock', '90s rock']
+        }
+        
+        for artist, keywords in similarity_mapping.items():
+            for keyword in keywords:
+                if any(keyword.lower() in tag.lower() for tag in all_tags):
+                    similarity = f"similar to {artist.title()}"
+                    if similarity not in classification['similar_artists']:
+                        classification['similar_artists'].append(similarity)
+        
+        # Limitiere Listen auf sinnvolle Größen
+        classification['mood'] = classification['mood'][:3]
+        classification['style'] = classification['style'][:3]
+        classification['similar_artists'] = classification['similar_artists'][:2]
+        classification['instrumentation'] = classification['instrumentation'][:3]
+        
+        return classification

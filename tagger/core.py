@@ -151,6 +151,26 @@ class MusicTagger:
             additional = ', '.join(online_meta['additional_genres'])
             tags.append(f"Additional Genres: {additional}")
         
+        # Erweiterte Klassifizierung
+        if online_meta.get('era'):
+            tags.append(f"Era: {online_meta['era']}")
+        if online_meta.get('mood') and online_meta['mood']:
+            mood_str = ', '.join(online_meta['mood'])
+            tags.append(f"Mood: {mood_str}")
+        if online_meta.get('style') and online_meta['style']:
+            style_str = ', '.join(online_meta['style'])
+            tags.append(f"Style: {style_str}")
+        if online_meta.get('similar_artists') and online_meta['similar_artists']:
+            similar_str = ', '.join(online_meta['similar_artists'])
+            tags.append(f"Similar Artists: {similar_str}")
+        if online_meta.get('instrumentation') and online_meta['instrumentation']:
+            instr_str = ', '.join(online_meta['instrumentation'])
+            tags.append(f"Instrumentation: {instr_str}")
+        if online_meta.get('energy_level'):
+            tags.append(f"Energy Level: {online_meta['energy_level']}")
+        if online_meta.get('tempo_description'):
+            tags.append(f"Tempo: {online_meta['tempo_description']}")
+        
         # Metainformationen
         tags.append(f"Source: {online_meta.get('source', 'Unknown')}")
         tags.append(f"Confidence: {online_meta.get('confidence', 0.0):.1%}")
