@@ -53,16 +53,13 @@ class OnlineMetadataProvider:
         else:
             self.lastfm = None
             
-        # Discogs Setup
-        self.discogs_token = os.getenv('DISCOGS_API_KEY')
-        if self.discogs_token:
-            try:
-                self.discogs = discogs_client.Client('MP3Tagger/1.0', user_token=self.discogs_token)
-            except Exception as e:
-                self.logger.error(f"Discogs Setup fehlgeschlagen: {e}")
-                self.discogs = None
-        else:
-            self.discogs = None
+        # Discogs Setup mit OAuth Consumer Keys (deaktiviert - benötigt komplexes OAuth 1.0a)
+        self.discogs_consumer_key = os.getenv('DISCOGS_CONSUMER_KEY')
+        self.discogs_consumer_secret = os.getenv('DISCOGS_CONSUMER_SECRET')
+        # Discogs temporarily disabled - OAuth 1.0a flow too complex for simple metadata access
+        # MusicBrainz und Last.fm bieten bereits umfassende Metadaten
+        self.discogs = None
+        logging.info("Discogs deaktiviert - OAuth 1.0a zu komplex für einfachen Metadaten-Zugriff")
     
     def _respect_rate_limit(self, service):
         """Berücksichtigt Rate Limits der APIs"""
@@ -109,27 +106,22 @@ class OnlineMetadataProvider:
             'source': None
         }
         
-        # Versuche verschiedene Quellen in Reihenfolge der Zuverlässigkeit
+        # Versuche verschiedene Quellen und kombiniere die besten Ergebnisse
         if search_info['artist'] and search_info['title']:
-            # 1. MusicBrainz (am zuverlässigsten für IDs)
+            mb_result = None
+            lastfm_result = None
+            
+            # 1. MusicBrainz abfragen (beste IDs, Cover, strukturierte Daten)
             mb_result = self._search_musicbrainz(search_info)
-            if mb_result and mb_result['confidence'] > 0.6:
-                results.update(mb_result)
-                results['source'] = 'MusicBrainz'
             
-            # 2. Last.fm (gute Track-Informationen)
-            elif self.lastfm:
+            # 2. Last.fm abfragen (beste Genre-Tags, Community-Daten)
+            if self.lastfm:
                 lastfm_result = self._search_lastfm(search_info)
-                if lastfm_result and lastfm_result['confidence'] > 0.6:
-                    results.update(lastfm_result)
-                    results['source'] = 'Last.fm'
             
-            # 3. Discogs (detaillierte Release-Informationen)
-            if not results['source'] and self.discogs:
-                discogs_result = self._search_discogs(search_info)
-                if discogs_result and discogs_result['confidence'] > 0.5:
-                    results.update(discogs_result)
-                    results['source'] = 'Discogs'
+            # 3. Intelligente Kombination der Ergebnisse
+            best_result = self._combine_results(mb_result, lastfm_result)
+            if best_result:
+                results.update(best_result)
         
         return results
     
@@ -316,40 +308,48 @@ class OnlineMetadataProvider:
             self._respect_rate_limit('lastfm')
             
             track = self.lastfm.get_track(search_info['artist'], search_info['title'])
-            track_info = track.get_correction()
             
-            if track_info:
+            # Sichere Art, Track-Informationen zu holen
+            try:
+                artist_name = track.artist.name if hasattr(track, 'artist') and track.artist else search_info['artist']
+                track_title = track.title if hasattr(track, 'title') and track.title else search_info['title']
+                
+                if not artist_name or not track_title:
+                    return None
+                    
                 confidence = self._calculate_confidence(
                     search_info,
-                    track_info['artist'],
-                    track_info['title'],
-                    track_info.get('album', '')
+                    artist_name,
+                    track_title,
+                    ''
                 )
                 
                 # Hole zusätzliche Informationen
                 top_tags = []
                 try:
                     tags = track.get_top_tags(limit=5)
-                    top_tags = [tag.item.name for tag in tags]
-                except:
+                    top_tags = [tag.item.name for tag in tags] if tags else []
+                except Exception as tag_e:
+                    self.logger.debug(f"Last.fm Tags nicht verfügbar: {tag_e}")
                     pass
                 
                 # Hole Cover-Art
                 cover_url = None
                 try:
-                    album_info = track.get_album()
-                    if album_info:
-                        cover_url = album_info.get_cover_image()
-                except:
+                    album = track.get_album()
+                    if album and hasattr(album, 'get_cover_image'):
+                        cover_url = album.get_cover_image()
+                except Exception as cover_e:
+                    self.logger.debug(f"Last.fm Cover nicht verfügbar: {cover_e}")
                     pass
                 
                 # Erweiterte Klassifizierung für Last.fm
                 classification = self._classify_musical_attributes(top_tags, {'year': None})
                 
                 return {
-                    'artist': track_info['artist'],
-                    'title': track_info['title'],
-                    'album': track_info.get('album'),
+                    'artist': artist_name,
+                    'title': track_title,
+                    'album': None,
                     'additional_genres': top_tags,
                     'cover_url': cover_url,
                     'confidence': confidence,
@@ -362,6 +362,10 @@ class OnlineMetadataProvider:
                     'energy_level': classification.get('energy_level'),
                     'tempo_description': classification.get('tempo_description')
                 }
+                
+            except Exception as parse_e:
+                self.logger.error(f"Last.fm Parsing-Fehler: {parse_e}")
+                return None
                 
         except Exception as e:
             self.logger.error(f"Last.fm Suche fehlgeschlagen: {e}")
@@ -377,7 +381,11 @@ class OnlineMetadataProvider:
             if search_info['album']:
                 query += f" {search_info['album']}"
             
-            results = self.discogs.search(query, type='release')
+            # Führe die Suche durch
+            search_results = self.discogs.search(query, type='release')
+            
+            # Begrenze die Ergebnisse für bessere Performance
+            results = list(search_results)[:5]
             
             if results:
                 best_match = results[0]
@@ -393,9 +401,9 @@ class OnlineMetadataProvider:
                     release = self.discogs.release(best_match.id)
                     
                     genres = []
-                    if hasattr(release, 'genres'):
+                    if hasattr(release, 'genres') and release.genres:
                         genres.extend(release.genres)
-                    if hasattr(release, 'styles'):
+                    if hasattr(release, 'styles') and release.styles:
                         genres.extend(release.styles)
                     
                     cover_url = None
@@ -403,13 +411,16 @@ class OnlineMetadataProvider:
                         cover_url = release.images[0]['uri']
                     
                     # Erweiterte Klassifizierung für Discogs
-                    classification = self._classify_musical_attributes(genres, {'year': release.year if hasattr(release, 'year') else None})
+                    classification = self._classify_musical_attributes(
+                        genres, 
+                        {'year': getattr(release, 'year', None)}
+                    )
                     
                     return {
                         'artist': release.artists[0].name if release.artists else None,
                         'title': best_match.title,
                         'album': release.title,
-                        'year': release.year if hasattr(release, 'year') else None,
+                        'year': getattr(release, 'year', None),
                         'additional_genres': genres,
                         'cover_url': cover_url,
                         'confidence': confidence,
@@ -422,14 +433,42 @@ class OnlineMetadataProvider:
                         'energy_level': classification.get('energy_level'),
                         'tempo_description': classification.get('tempo_description')
                     }
-                    
                 except Exception as e:
                     self.logger.error(f"Discogs Release-Details fehlgeschlagen: {e}")
-                    
+                    # Fallback mit grundlegenden Informationen
+                    return {
+                        'artist': release.artists[0].name if release.artists else None,
+                        'title': best_match.title,
+                        'album': release.title,
+                        'year': getattr(release, 'year', None),
+                        'additional_genres': genres,
+                        'cover_url': cover_url,
+                        'confidence': confidence,
+                        # Erweiterte Klassifizierung
+                        'era': classification.get('era'),
+                        'mood': classification.get('mood'),
+                        'style': classification.get('style'),
+                        'similar_artists': classification.get('similar_artists'),
+                        'instrumentation': classification.get('instrumentation'),
+                        'energy_level': classification.get('energy_level'),
+                        'tempo_description': classification.get('tempo_description')
+                    }
+                except Exception as e:
+                    self.logger.error(f"Discogs Release-Details fehlgeschlagen: {e}")
+                    # Fallback mit grundlegenden Informationen
+                    return {
+                        'artist': best_match.artists[0].name if best_match.artists else None,
+                        'title': best_match.title,
+                        'confidence': confidence,
+                        'additional_genres': [],
+                        'cover_url': None
+                    }
+            
+            return None
+            
         except Exception as e:
             self.logger.error(f"Discogs Suche fehlgeschlagen: {e}")
-        
-        return None
+            return None
     
     def _calculate_confidence(self, search_info, found_artist, found_title, found_album):
         """Berechnet Vertrauenswert basierend auf String-Ähnlichkeit"""
@@ -642,3 +681,80 @@ class OnlineMetadataProvider:
         classification['instrumentation'] = classification['instrumentation'][:3]
         
         return classification
+
+    def _combine_results(self, mb_result, lastfm_result):
+        """
+        Intelligente Kombination der Ergebnisse von MusicBrainz und Last.fm
+        
+        Priorisierungslogik:
+        - Basis-Metadaten: MusicBrainz bevorzugt (strukturierter, IDs, Cover)
+        - Genres: Last.fm bevorzugt (Community-basiert, aktueller)
+        - Erweiterte Klassifikation: MusicBrainz bevorzugt (algorithmisch konsistent)
+        - Fallback: Der Service mit höherer Confidence
+        """
+        if not mb_result and not lastfm_result:
+            return None
+            
+        # Wenn nur ein Service Ergebnisse hat
+        if mb_result and not lastfm_result:
+            return mb_result
+        if lastfm_result and not mb_result:
+            return lastfm_result
+            
+        # Beide Services haben Ergebnisse - kombiniere intelligent
+        combined = {}
+        
+        # Bestimme Haupt-Quelle basierend auf Confidence
+        if mb_result['confidence'] >= lastfm_result['confidence']:
+            primary, secondary = mb_result, lastfm_result
+            primary_source, secondary_source = 'MusicBrainz', 'Last.fm'
+        else:
+            primary, secondary = lastfm_result, mb_result  
+            primary_source, secondary_source = 'Last.fm', 'MusicBrainz'
+        
+        # Basis-Metadaten: MusicBrainz bevorzugt (strukturierter)
+        if mb_result['confidence'] > 0.5:
+            for key in ['artist', 'title', 'album', 'year', 'track_number', 'total_tracks']:
+                combined[key] = mb_result.get(key) or primary.get(key)
+            
+            # MusicBrainz IDs und Cover (nur von MusicBrainz verfügbar)
+            for key in ['musicbrainz_recording_id', 'musicbrainz_release_id', 'musicbrainz_artist_id', 'cover_url', 'cover_data']:
+                combined[key] = mb_result.get(key)
+        else:
+            # Fallback auf Primary Service
+            for key in ['artist', 'title', 'album', 'year', 'track_number', 'total_tracks']:
+                combined[key] = primary.get(key)
+        
+        # Genres: Kombiniere beide, Last.fm als führend
+        combined_genres = []
+        if lastfm_result.get('additional_genres'):
+            combined_genres.extend(lastfm_result['additional_genres'][:3])  # Top 3 von Last.fm
+        if mb_result.get('additional_genres'):
+            # Füge MusicBrainz Genres hinzu, die nicht schon vorhanden sind
+            for genre in mb_result['additional_genres'][:3]:
+                if genre.lower() not in [g.lower() for g in combined_genres]:
+                    combined_genres.append(genre)
+        
+        combined['additional_genres'] = combined_genres[:6]  # Max 6 Genres
+        combined['genre'] = combined_genres[0] if combined_genres else primary.get('genre')
+        
+        # Erweiterte Klassifikation: MusicBrainz bevorzugt (konsistenter)
+        if mb_result['confidence'] > 0.5:
+            for key in ['era', 'mood', 'style', 'similar_artists', 'instrumentation', 'energy_level', 'tempo_description']:
+                combined[key] = mb_result.get(key)
+        else:
+            for key in ['era', 'mood', 'style', 'similar_artists', 'instrumentation', 'energy_level', 'tempo_description']:
+                combined[key] = primary.get(key)
+        
+        # Confidence: Höhere der beiden
+        combined['confidence'] = max(mb_result['confidence'], lastfm_result['confidence'])
+        
+        # Source: Zeige beide Services
+        if mb_result['confidence'] > 0.5 and lastfm_result['confidence'] > 0.5:
+            combined['source'] = f"{primary_source} + {secondary_source}"
+        else:
+            combined['source'] = primary_source
+            
+        logging.info(f"Kombinierte Ergebnisse: {primary_source} (conf={primary['confidence']:.2f}) + {secondary_source} (conf={secondary['confidence']:.2f}) = {combined['source']}")
+        
+        return combined
