@@ -8,7 +8,9 @@ import logging
 import base64
 from collections import defaultdict
 import re
+import asyncio
 from .online_metadata import OnlineMetadataProvider
+from .fallback_analysis import FallbackAnalyzer
 
 logging.basicConfig(
     level=logging.INFO,
@@ -23,6 +25,8 @@ class MusicTagger:
         self.min_confidence = 0.6
         # Initialisiere Online-Metadata-Provider
         self.online_provider = OnlineMetadataProvider()
+        # Initialisiere Fallback-Analyzer
+        self.fallback_analyzer = FallbackAnalyzer()
 
     def scan_directory(self, directory):
         files = []
@@ -68,11 +72,12 @@ class MusicTagger:
         for file_data in files_data:
             try:
                 # Prüfe ob Online-Suche sinnvoll ist
-                # Suche für alle Dateien, aber priorisiere die mit fehlenden Daten
                 has_basic_info = (
                     file_data['current_artist'] and 
                     file_data['current_title']
                 )
+                
+                online_meta = None
                 
                 if has_basic_info:
                     logging.info(f"Suche erweiterte Online-Metadaten für: {file_data['filename']}")
@@ -85,7 +90,135 @@ class MusicTagger:
                         current_album=file_data['current_album']
                     )
                     
-                    if online_meta and online_meta['confidence'] > 0.3:  # Niedrigere Schwelle
+                    # 🎨 Erweiterte Cover-Suche: Wenn kein Cover gefunden, versuche Audio-Fingerprinting
+                    if online_meta and not online_meta.get('cover_url'):
+                        logging.info(f"🎨 Kein Cover in MusicBrainz/Last.fm - versuche Audio-Fingerprinting für Cover")
+                        try:
+                            # analyze_audio_fingerprint ist bereits sync und führt async intern aus
+                            audio_result = self.fallback_analyzer.analyze_audio_fingerprint(file_data['path'])
+                            if audio_result and audio_result.get('cover_url'):
+                                online_meta['cover_url'] = audio_result['cover_url']
+                                logging.info(f"🎨 Cover via Audio-Fingerprinting gefunden: {audio_result['cover_url'][:60]}...")
+                                # Ergänze auch Streaming-Links
+                                if audio_result.get('spotify_url'):
+                                    online_meta['spotify_url'] = audio_result['spotify_url']
+                                if audio_result.get('youtube_url'):
+                                    online_meta['youtube_url'] = audio_result['youtube_url']
+                                # Ergänze Service-Information für erweiterte Anzeige
+                                if audio_result.get('service'):
+                                    online_meta['cover_service'] = audio_result['service']
+                        except Exception as e:
+                            logging.warning(f"🎨 Audio-Fingerprinting für Cover fehlgeschlagen: {e}")
+                else:
+                    # Prüfe ob Fallback-Strategien nötig sind
+                    logging.info(f"🔍 Keine ID3-Tags - aktiviere Fallback-Strategien für: {file_data['filename']}")
+                    
+                    # Prüfe ob Dateiname aussagekräftig ist
+                    has_meaningful_filename = not any(bad_word in file_data['filename'].lower() 
+                                                     for bad_word in ['ohne_id3', 'noname', 'track', 'unknown', 'untitled'])
+                    
+                    if has_meaningful_filename:
+                        # Für aussagekräftige Dateinamen: Erst Pfad-Analyse, dann Audio-Fingerprinting
+                        logging.info(f"📁 Dateiname aussagekräftig - versuche Pfad-Analyse")
+                        fallback_suggestions = self.fallback_analyzer.get_fallback_suggestions(file_data['path'])
+                    else:
+                        # Für nichtssagende Dateinamen: Direkt Audio-Fingerprinting
+                        logging.info(f"🎵 Dateiname nicht aussagekräftig - verwende Audio-Fingerprinting direkt")
+                        try:
+                            # analyze_audio_fingerprint ist bereits sync und führt async intern aus
+                            audio_result = self.fallback_analyzer.analyze_audio_fingerprint(file_data['path'])
+                            if audio_result and audio_result.get('confidence', 0) > 0:
+                                fallback_suggestions = [audio_result]  # Als Liste formatieren
+                            else:
+                                fallback_suggestions = []
+                        except Exception as e:
+                            logging.warning(f"🎵 Audio-Fingerprinting fehlgeschlagen: {e}")
+                            fallback_suggestions = []
+                    
+                    # Verarbeite Fallback-Ergebnisse
+                    if fallback_suggestions:
+                        best_fallback = fallback_suggestions[0]  # Höchste Confidence
+                        logging.info(f"✅ Fallback gefunden via {best_fallback.get('method', 'unknown')}: "
+                                   f"{best_fallback.get('artist')} - {best_fallback.get('title')} "
+                                   f"(Confidence: {best_fallback.get('confidence', 0):.2f})")
+                        
+                        # Bei guter Confidence: Verwende für Online-Suche
+                        if best_fallback.get('confidence', 0) > 0.6:
+                            fallback_online_meta = self.online_provider.search_metadata(
+                                filename=file_data['filename'],
+                                current_artist=best_fallback.get('artist'),
+                                current_title=best_fallback.get('title'),
+                                current_album=best_fallback.get('album')
+                            )
+                            
+                            if fallback_online_meta and fallback_online_meta.get('confidence', 0) > 0.5:
+                                online_meta = fallback_online_meta
+                                online_meta['fallback_method'] = best_fallback.get('method', 'unknown')
+                                online_meta['service'] = best_fallback.get('service')
+                                # Behalte Audio-Fingerprinting IDs
+                                if best_fallback.get('acoustid'):
+                                    online_meta['acoustid'] = best_fallback['acoustid']
+                                if best_fallback.get('musicbrainz_id'):
+                                    online_meta['musicbrainz_id'] = best_fallback['musicbrainz_id']
+                                if best_fallback.get('shazam_track_id'):
+                                    online_meta['shazam_track_id'] = best_fallback['shazam_track_id']
+                                # WICHTIG: Bevorzuge Shazam Cover wenn MusicBrainz keins hat
+                                if best_fallback.get('cover_url') and not online_meta.get('cover_url'):
+                                    online_meta['cover_url'] = best_fallback['cover_url']
+                                    logging.info(f"🎨 Verwende Shazam Cover: {best_fallback['cover_url'][:60]}...")
+                                # Bevorzuge Shazam Streaming-Links
+                                if best_fallback.get('spotify_url'):
+                                    online_meta['spotify_url'] = best_fallback['spotify_url']
+                                if best_fallback.get('youtube_url'):
+                                    online_meta['youtube_url'] = best_fallback['youtube_url']
+                                logging.info(f"✅ Fallback → Online erfolgreich: {online_meta['source']}")
+                            else:
+                                # Verwende Fallback-Daten direkt
+                                online_meta = {
+                                    'artist': best_fallback.get('artist'),
+                                    'title': best_fallback.get('title'),
+                                    'album': best_fallback.get('album'),
+                                    'genre': best_fallback.get('genre'),
+                                    'year': best_fallback.get('year'),
+                                    'confidence': best_fallback.get('confidence', 0),
+                                    'source': f"Fallback ({best_fallback.get('method', 'unknown')})",
+                                    'fallback_method': best_fallback.get('method', 'unknown'),
+                                    'service': best_fallback.get('service'),
+                                    
+                                    # Audio-Fingerprinting IDs
+                                    'acoustid': best_fallback.get('acoustid'),
+                                    'musicbrainz_id': best_fallback.get('musicbrainz_id'),
+                                    'shazam_track_id': best_fallback.get('shazam_track_id'),
+                                    
+                                    # Cover und Streaming-Links (besonders von Shazam)
+                                    'cover_url': best_fallback.get('cover_url'),
+                                    'spotify_url': best_fallback.get('spotify_url'),
+                                    'youtube_url': best_fallback.get('youtube_url')
+                                }
+                                logging.info(f"📋 Verwende Fallback-Daten direkt ({best_fallback.get('service', 'unknown')})")
+                        else:
+                            # Auch niedrige Confidence verwenden
+                            logging.info(f"🔍 Niedrige Fallback-Confidence ({best_fallback.get('confidence', 0):.2f}) - verwende trotzdem")
+                            online_meta = {
+                                'artist': best_fallback.get('artist'),
+                                'title': best_fallback.get('title'),
+                                'album': best_fallback.get('album'),
+                                'confidence': best_fallback.get('confidence', 0),
+                                'source': f"Fallback ({best_fallback.get('service', 'unknown')})",
+                                'fallback_method': best_fallback.get('method', 'unknown'),
+                                'service': best_fallback.get('service'),
+                                'acoustid': best_fallback.get('acoustid'),
+                                'musicbrainz_id': best_fallback.get('musicbrainz_id'),
+                                'shazam_track_id': best_fallback.get('shazam_track_id'),
+                                'cover_url': best_fallback.get('cover_url'),
+                                'spotify_url': best_fallback.get('spotify_url'),
+                                'youtube_url': best_fallback.get('youtube_url')
+                            }
+                    else:
+                        logging.warning(f"❌ Keine Fallback-Strategien erfolgreich für: {file_data['filename']}")
+                
+                # Verarbeite Ergebnisse
+                if online_meta and online_meta.get('confidence', 0) > 0.3:
                         # Erstelle erweiterte Metadaten-Anzeige
                         suggested_tags = self._format_enhanced_suggested_tags(online_meta)
                         
@@ -99,14 +232,27 @@ class MusicTagger:
                             'online_metadata': online_meta  # Vollständige Metadaten für erweiterte Anzeige
                         })
                         
-                        logging.info(f"✓ Metadaten gesetzt: {online_meta.get('artist')} - {online_meta.get('title')} via {online_meta['source']} (Vertrauen: {online_meta['confidence']:.2f})")
-                    else:
-                        if online_meta:
-                            logging.warning(f"✗ Niedrige Konfidenz ({online_meta['confidence']:.2f}) für: {file_data['filename']}")
-                        else:
-                            logging.warning(f"✗ Keine Online-Metadaten für: {file_data['filename']}")
+                        source_info = online_meta.get('source', 'Unknown')
+                        if online_meta.get('fallback_method'):
+                            source_info += f" (via {online_meta['fallback_method']})"
+                        
+                        logging.info(f"✓ Metadaten gesetzt: {online_meta.get('artist')} - {online_meta.get('title')} "
+                                   f"via {source_info} (Vertrauen: {online_meta.get('confidence', 0):.2f})")
                 else:
-                    logging.warning(f"⚠ Überspringe {file_data['filename']} - fehlende Basis-Infos (Artist: {bool(file_data['current_artist'])}, Title: {bool(file_data['current_title'])})")
+                    if online_meta and online_meta.get('confidence'):
+                        logging.warning(f"✗ Niedrige Konfidenz ({online_meta['confidence']:.2f}) für: {file_data['filename']}")
+                    else:
+                        logging.warning(f"✗ Keine verwertbaren Metadaten für: {file_data['filename']}")
+                    # Setze Fallback-Werte für eine saubere Anzeige
+                    file_data.update({
+                        'suggested_artist': None,
+                        'suggested_title': None,
+                        'suggested_album': None,
+                        'suggested_genre': None,
+                        'suggested_cover_url': None,
+                        'suggested_full_tags': None,
+                        'online_metadata': None
+                    })
                 
                 results.append(file_data)
                 

@@ -201,6 +201,50 @@
                                     {% if file.online_metadata.tempo_description %}
                                         <p><strong>Tempo:</strong> {{ file.online_metadata.tempo_description }}</p>
                                     {% endif %}
+                                    
+                                    <!-- Audio-Fingerprinting Informationen -->
+                                    {% if file.online_metadata.service %}
+                                        <hr style="margin: 10px 0;">
+                                        <p><strong>🎯 Erkannt durch:</strong> 
+                                            {% if file.online_metadata.service == 'shazam' %}
+                                                ShazamIO (Audio Recognition)
+                                            {% elif file.online_metadata.service == 'acoustid' %}
+                                                AcoustID (Audio Fingerprinting)
+                                            {% else %}
+                                                {{ file.online_metadata.service }}
+                                            {% endif %}
+                                        </p>
+                                        {% if file.online_metadata.confidence %}
+                                            <p><strong>Vertrauen:</strong> {{ "%.1f"|format(file.online_metadata.confidence * 100) }}%</p>
+                                        {% endif %}
+                                    {% endif %}
+                                    
+                                    <!-- Streaming-Links -->
+                                    {% if file.online_metadata.spotify_url or file.online_metadata.youtube_url %}
+                                        <hr style="margin: 10px 0;">
+                                        <p><strong>🎧 Streaming:</strong></p>
+                                        {% if file.online_metadata.spotify_url %}
+                                            <p>• <a href="{{ file.online_metadata.spotify_url }}" target="_blank">Spotify</a></p>
+                                        {% endif %}
+                                        {% if file.online_metadata.youtube_url %}
+                                            <p>• <a href="{{ file.online_metadata.youtube_url }}" target="_blank">YouTube Music</a></p>
+                                        {% endif %}
+                                    {% endif %}
+                                    
+                                    <!-- IDs für Debugging -->
+                                    {% if file.online_metadata.acoustid or file.online_metadata.shazam_track_id %}
+                                        <hr style="margin: 10px 0;">
+                                        <p><strong>🔍 IDs:</strong></p>
+                                        {% if file.online_metadata.acoustid %}
+                                            <p>• AcoustID: {{ file.online_metadata.acoustid[:8] }}...</p>
+                                        {% endif %}
+                                        {% if file.online_metadata.shazam_track_id %}
+                                            <p>• Shazam: {{ file.online_metadata.shazam_track_id }}</p>
+                                        {% endif %}
+                                        {% if file.online_metadata.musicbrainz_id %}
+                                            <p>• MusicBrainz: {{ file.online_metadata.musicbrainz_id[:8] }}...</p>
+                                        {% endif %}
+                                    {% endif %}
                                 {% else %}
                                     <p>Keine Klassifizierung verfügbar</p>
                                 {% endif %}
