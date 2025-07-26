@@ -1,0 +1,31 @@
+document.addEventListener('DOMContentLoaded', function() {
+    // Verzeichnis-Checkboxen
+    document.querySelectorAll('.dir-checkbox').forEach(checkbox => {
+        checkbox.addEventListener('change', function() {
+            const dirPath = this.dataset.dir;
+            const fileCheckboxes = document.querySelectorAll(
+                `tr[data-dir="${dirPath}"] .file-checkbox`
+            );
+            fileCheckboxes.forEach(cb => {
+                cb.checked = this.checked;
+            });
+        });
+    });
+
+    // Apply-Button
+    document.getElementById('apply-selected').addEventListener('click', function() {
+        const selectedFiles = Array.from(document.querySelectorAll('.file-checkbox:checked'))
+            .map(cb => cb.dataset.file);
+        
+        if (selectedFiles.length === 0) {
+            alert('Bitte wählen Sie mindestens eine Datei aus');
+            return;
+        }
+
+        if (confirm(`Möchten Sie die Tags für ${selectedFiles.length} Dateien aktualisieren?`)) {
+            // Hier würde der tatsächliche API-Aufruf stehen
+            console.log('Ausgewählte Dateien:', selectedFiles);
+            alert('Aktualisierung gestartet (Demo)');
+        }
+    });
+});
