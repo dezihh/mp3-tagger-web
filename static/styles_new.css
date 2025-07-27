@@ -156,6 +156,37 @@ body {
     flex-wrap: wrap;
 }
 
+.track-config {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    background: #f8f9fa;
+    border-radius: 4px;
+    border: 1px solid #dee2e6;
+}
+
+.track-config label {
+    font-weight: 500;
+    color: #495057;
+    font-size: 14px;
+}
+
+.track-config input[type="number"] {
+    width: 50px;
+    padding: 4px 6px;
+    border: 1px solid #ced4da;
+    border-radius: 3px;
+    text-align: center;
+    font-size: 14px;
+}
+
+.track-example {
+    font-size: 12px;
+    color: #6c757d;
+    font-style: italic;
+}
+
 /* Button Styles */
 .btn {
     padding: 8px 16px;
@@ -316,6 +347,27 @@ body {
 .col-genre { width: 120px; min-width: 100px; }
 .col-cover { width: 80px; text-align: center; }
 .col-actions { width: 120px; text-align: center; }
+
+/* Filename Hover Styles */
+.filename-info {
+    padding: 4px 8px;
+    border-radius: 4px;
+    transition: all 0.2s ease;
+    display: inline-block;
+    cursor: pointer;
+    color: #007bff;
+    text-decoration: underline;
+    font-weight: 500;
+}
+
+.filename-info:hover {
+    background-color: #e3f2fd;
+    border: 1px solid #2196f3;
+    color: #0056b3;
+    text-decoration: none;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
 
 /* File Row Styles */
 .file-row {
@@ -555,9 +607,8 @@ body {
     border-radius: 8px;
     box-shadow: 0 4px 6px rgba(0,0,0,0.1);
     width: 90%;
-    max-width: 800px;
-    max-height: 80vh;
-    overflow-y: auto;
+    max-width: 600px;
+    /* Entfernt: max-height und overflow für Details Modal */
 }
 
 .modal-header {
@@ -631,17 +682,20 @@ body {
 
 /* Details Modal Styling */
 .details-container {
-    max-height: 400px;
-    overflow-y: auto;
+    /* Entfernt: max-height und overflow für bessere Sichtbarkeit */
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
 }
 
 .detail-item {
     display: flex;
     justify-content: space-between;
     align-items: flex-start;
-    padding: 4px 8px;
+    padding: 2px 8px;
     border-bottom: 1px solid #f0f0f0;
-    min-height: 20px;
+    min-height: 18px;
+    font-size: 12px;
 }
 
 .detail-item:nth-child(even) {
@@ -651,9 +705,9 @@ body {
 .detail-label {
     font-weight: 600;
     color: #333;
-    min-width: 140px;
+    min-width: 120px;
     flex-shrink: 0;
-    font-size: 13px;
+    font-size: 12px;
 }
 
 .detail-value {
@@ -661,7 +715,7 @@ body {
     word-wrap: break-word;
     text-align: right;
     flex-grow: 1;
-    font-size: 13px;
+    font-size: 12px;
 }
 
 /* HR-Separator für Details */

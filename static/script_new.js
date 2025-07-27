@@ -24,6 +24,9 @@ function initializeFileTable() {
     // Keyboard Shortcuts
     setupKeyboardShortcuts();
     
+    // Track Digits Configuration
+    setupTrackDigitsConfig();
+    
     console.log('File Table initialisiert');
 }
 
@@ -139,6 +142,36 @@ function setupKeyboardShortcuts() {
 }
 
 /**
+ * Track Digits Configuration Setup
+ */
+function setupTrackDigitsConfig() {
+    const trackDigitsInput = document.getElementById('track-digits');
+    const trackExample = document.getElementById('track-example');
+    
+    if (trackDigitsInput && trackExample) {
+        // Update example on change
+        trackDigitsInput.addEventListener('input', function() {
+            const digits = parseInt(this.value) || 2;
+            const example = '1'.padStart(digits, '0');
+            trackExample.textContent = `Beispiel: ${example}`;
+        });
+        
+        // Initialize example
+        const digits = parseInt(trackDigitsInput.value) || 2;
+        const example = '1'.padStart(digits, '0');
+        trackExample.textContent = `Beispiel: ${example}`;
+    }
+}
+
+/**
+ * Get current track digits setting
+ */
+function getTrackDigits() {
+    const trackDigitsInput = document.getElementById('track-digits');
+    return trackDigitsInput ? parseInt(trackDigitsInput.value) || 2 : 2;
+}
+
+/**
  * Alle markieren
  */
 function selectAll() {
@@ -164,55 +197,6 @@ function selectNone() {
         checkbox.indeterminate = false;
     });
     console.log('Alle Dateien abgewählt');
-}
-
-/**
- * Nach Verzeichnis markieren
- */
-function selectByDirectory() {
-    const directories = document.querySelectorAll('.directory-section');
-    if (directories.length === 0) return;
-    
-    // Zeige Modal für Verzeichnis-Auswahl
-    const modal = document.createElement('div');
-    modal.className = 'modal';
-    modal.style.display = 'block';
-    
-    const content = document.createElement('div');
-    content.className = 'modal-content';
-    
-    const header = document.createElement('div');
-    header.className = 'modal-header';
-    header.innerHTML = `
-        <h3>Verzeichnis auswählen</h3>
-        <span class="close" onclick="this.closest('.modal').remove()">&times;</span>
-    `;
-    
-    const body = document.createElement('div');
-    body.className = 'modal-body';
-    
-    directories.forEach((dir, index) => {
-        const dirPath = dir.dataset.directory;
-        const fileCount = dir.querySelectorAll('.file-checkbox').length;
-        
-        const button = document.createElement('button');
-        button.className = 'btn btn-secondary';
-        button.style.margin = '5px';
-        button.style.display = 'block';
-        button.style.width = '100%';
-        button.textContent = `${dirPath} (${fileCount} Dateien)`;
-        button.onclick = function() {
-            document.querySelector(`input[data-dir="${dirPath}"]`).click();
-            modal.remove();
-        };
-        
-        body.appendChild(button);
-    });
-    
-    content.appendChild(header);
-    content.appendChild(body);
-    modal.appendChild(content);
-    document.body.appendChild(modal);
 }
 
 /**
@@ -345,6 +329,28 @@ function updateRowWithRecognitionData(filePath, result) {
     setTimeout(() => {
         row.style.backgroundColor = '';
     }, 2000);
+}
+
+/**
+ * Details beim Hover anzeigen
+ */
+function showDetailsOnHover(filePath) {
+    // Kurze Verzögerung um zu vermeiden, dass bei schnellem Mouse-over sofort das Modal öffnet
+    clearTimeout(window.hoverTimeout);
+    window.hoverTimeout = setTimeout(() => {
+        showDetails(filePath);
+    }, 500); // 500ms Verzögerung
+}
+
+/**
+ * Details beim Hover verstecken
+ */
+function hideDetailsOnHover() {
+    // Timeout abbrechen falls noch aktiv
+    clearTimeout(window.hoverTimeout);
+    
+    // Modal sofort schließen wenn Hover-Feld verlassen wird
+    closeDetailsModal();
 }
 
 /**
@@ -536,17 +542,18 @@ function saveChanges() {
     }
     
     // Sammle alle Metadaten-Änderungen
-    const updates = {};
+    const updates = [];
     
     selectedFiles.forEach(filePath => {
         const row = document.querySelector(`tr[data-file-path="${filePath}"]`);
         if (row) {
-            updates[filePath] = {
+            updates.push({
+                path: filePath,
                 artist: row.querySelector('[data-field="artist"]')?.value || '',
                 title: row.querySelector('[data-field="title"]')?.value || '',
                 album: row.querySelector('[data-field="album"]')?.value || '',
                 track: row.querySelector('[data-field="track"]')?.value || ''
-            };
+            });
         }
     });
     
@@ -567,7 +574,7 @@ function saveChanges() {
         hideProcessingStatus();
         
         if (data.success) {
-            alert(`Erfolgreich gespeichert:\n${data.processed} Datei(en)`);
+            alert(`Erfolgreich gespeichert:\n${data.processed_count} von ${data.total_files} Datei(en)`);
             
             if (data.errors && data.errors.length > 0) {
                 console.warn('Fehler bei einigen Dateien:', data.errors);
@@ -744,14 +751,15 @@ function applyAlbumCandidate(candidateIndex, directoryPath) {
             }
         }
         
-        // Setze Track-Nummer: Verwende erkannte Nummer oder sequenziell
+        // Setze Track-Nummer: Verwende erkannte Nummer oder sequenziell mit konfigurierten Stellen
         if (trackInput) {
+            const trackDigits = getTrackDigits();
             let trackNumber;
             if (item.detectedTrack) {
-                trackNumber = item.detectedTrack.toString().padStart(2, '0');
+                trackNumber = item.detectedTrack.toString().padStart(trackDigits, '0');
                 console.log(`Erkannte Track-Nummer verwendet: ${trackNumber} für ${item.fileName}`);
             } else {
-                trackNumber = (index + 1).toString().padStart(2, '0');
+                trackNumber = (index + 1).toString().padStart(trackDigits, '0');
                 console.log(`Sequenzielle Track-Nummer gesetzt: ${trackNumber} für ${item.fileName}`);
             }
             trackInput.value = trackNumber;
