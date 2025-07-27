@@ -67,37 +67,6 @@ class MusicTagger:
         # Verwende den neuen Metadata-Enrichment-Service
         return self.metadata_service.enrich_multiple_files(files_data)
 
-    def update_id3_tags(self, file_path, artist=None, title=None, album=None, track=None):
-        """Update ID3-Tags einer MP3-Datei"""
-        try:
-            import eyed3
-            
-            audio = eyed3.load(file_path)
-            if audio.tag is None:
-                audio.initTag()
-            
-            # Update Tags wenn Werte vorhanden
-            if artist:
-                audio.tag.artist = artist
-            if title:
-                audio.tag.title = title
-            if album:
-                audio.tag.album = album
-            if track:
-                try:
-                    audio.tag.track_num = int(track)
-                except (ValueError, TypeError):
-                    pass  # Ignoriere ungültige Track-Nummern
-            
-            # Speichere Änderungen
-            audio.tag.save()
-            logging.info(f"ID3-Tags aktualisiert: {file_path}")
-            return True
-            
-        except Exception as e:
-            logging.error(f"Fehler beim Update der ID3-Tags für {file_path}: {str(e)}")
-            return False
-
     def _format_enhanced_suggested_tags(self, online_meta):
         """Formatiert erweiterte Online-Metadaten für die Anzeige"""
         tags = []

@@ -22,8 +22,7 @@
             </div>
             
             <div class="action-controls">
-                <button onclick="saveChanges()" class="btn btn-primary">💾 Änderungen speichern</button>
-                <button onclick="performOnlineSearch()" class="btn btn-success">🌐 Online-Erkennung für markierte Dateien</button>
+                <button onclick="processSelected()" class="btn btn-success">Markierte verarbeiten</button>
                 <button onclick="goBack()" class="btn btn-back">🔙 Zurück</button>
             </div>
         </div>
@@ -70,14 +69,14 @@
                             <td class="col-select">
                                 <input type="checkbox" class="file-checkbox" 
                                        data-file="{{ file.path }}"
-                                       {% if not file.current_artist and not file.current_title %}checked{% endif %}>
+                                       {% if file.suggested_artist %}checked{% endif %}>
                             </td>
                             
                             <!-- Dateiname -->
                             <td class="col-filename">
                                 <div class="filename-info" 
                                      title="Vollständiger Pfad: {{ file.path }}"
-                                     onmouseover="showTooltip(this, 'Vollständiger Pfad: {{ file.path }}')"
+                                     onmouseover="showTooltip(this, '{{ file.path }}')"
                                      onmouseout="hideTooltip()">
                                     {{ file.filename }}
                                 </div>
@@ -100,7 +99,7 @@
                                        class="metadata-input" 
                                        data-field="artist"
                                        data-file="{{ file.path }}"
-                                       value="{{ file.current_artist or '' }}" 
+                                       value="{{ file.suggested_artist or file.current_artist or '' }}" 
                                        placeholder="Unbekannt">
                             </td>
                             
@@ -110,7 +109,7 @@
                                        class="metadata-input" 
                                        data-field="title"
                                        data-file="{{ file.path }}"
-                                       value="{{ file.current_title or '' }}" 
+                                       value="{{ file.suggested_title or file.current_title or '' }}" 
                                        placeholder="Unbekannt">
                             </td>
                             
@@ -120,15 +119,29 @@
                                        class="metadata-input" 
                                        data-field="album"
                                        data-file="{{ file.path }}"
-                                       value="{{ file.current_album or '' }}" 
+                                       value="{{ file.suggested_album or file.current_album or '' }}" 
                                        placeholder="Unbekannt">
                             </td>
                             
                             <!-- Genre -->
                             <td class="col-genre">
                                 <div class="genre-container">
-                                    {% if file.current_genre %}
-                                        <span class="current-value">{{ file.current_genre }}</span>
+                                    {% if file.suggested_genre or file.current_genre %}
+                                        <span class="primary-genre">
+                                            {{ file.suggested_genre or file.current_genre }}
+                                        </span>
+                                        {% if file.suggested_full_tags and file.suggested_full_tags.genres %}
+                                            {% if file.suggested_full_tags.genres|length > 1 %}
+                                                <details class="genre-details">
+                                                    <summary>+{{ file.suggested_full_tags.genres|length - 1 }} weitere</summary>
+                                                    <div class="additional-genres">
+                                                        {% for genre in file.suggested_full_tags.genres[1:] %}
+                                                            <span class="genre-tag">{{ genre }}</span>
+                                                        {% endfor %}
+                                                    </div>
+                                                </details>
+                                            {% endif %}
+                                        {% endif %}
                                     {% else %}
                                         <span class="no-genre">Unbekannt</span>
                                     {% endif %}
@@ -140,6 +153,7 @@
                                 <div class="cover-info">
                                     {% set internal_cover = file.current_cover_info %}
                                     {% set external_cover = file.external_cover_info %}
+                                    {% set suggested_cover = file.suggested_cover_url %}
                                     
                                     {% if internal_cover and external_cover %}
                                         <span class="cover-status cover-both" title="Sowohl intern als auch extern vorhanden">
@@ -147,16 +161,27 @@
                                         </span>
                                     {% elif internal_cover %}
                                         <span class="cover-status cover-internal" title="Intern im MP3 gespeichert">
-                                            I {{ internal_cover.size or '?' }}px
+                                            I{{ internal_cover.size or '?' }}px
                                         </span>
                                     {% elif external_cover %}
                                         <span class="cover-status cover-external" title="Externe Datei im Verzeichnis">
-                                            E {{ external_cover.size or '?' }}px
+                                            E{{ external_cover.size or '?' }}px
+                                        </span>
+                                    {% elif suggested_cover %}
+                                        <span class="cover-status cover-online" title="Online Cover verfügbar">
+                                            🌐 Online
                                         </span>
                                     {% else %}
                                         <span class="cover-status cover-none" title="Kein Cover vorhanden">
                                             Nein
                                         </span>
+                                    {% endif %}
+                                    
+                                    <!-- Cover Preview -->
+                                    {% if internal_cover or suggested_cover %}
+                                        <div class="cover-preview" onclick="showCoverPreview('{{ file.path }}')">
+                                            🖼️
+                                        </div>
                                     {% endif %}
                                 </div>
                             </td>
