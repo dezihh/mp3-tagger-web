@@ -272,6 +272,112 @@ class MusicTagger:
         
         return results
 
+    def embed_cover_art(self, file_path, cover_data):
+        """
+        Bettet Cover-Art in MP3-Datei ein
+        
+        Args:
+            file_path (str): Pfad zur MP3-Datei
+            cover_data (bytes): Cover-Bilddaten
+            
+        Returns:
+            bool: True wenn erfolgreich, False sonst
+        """
+        try:
+            audio = eyed3.load(file_path)
+            if audio.tag is None:
+                audio.initTag()
+            
+            # Entferne vorhandene Cover-Bilder
+            for img in list(audio.tag.images):
+                if img.picture_type == eyed3.id3.frames.ImageFrame.FRONT_COVER:
+                    audio.tag.images.remove(img.description)
+            
+            # Füge neues Cover hinzu
+            audio.tag.images.set(
+                eyed3.id3.frames.ImageFrame.FRONT_COVER,
+                cover_data,
+                'image/jpeg'
+            )
+            
+            # Speichere Änderungen
+            audio.tag.save()
+            logging.info(f"✅ Cover erfolgreich eingebettet in: {os.path.basename(file_path)}")
+            return True
+            
+        except Exception as e:
+            logging.error(f"❌ Cover-Einbettung fehlgeschlagen für {file_path}: {str(e)}")
+            return False
+
+    def remove_cover_art(self, file_path):
+        """
+        Entfernt alle Cover-Bilder aus MP3-Datei
+        
+        Args:
+            file_path (str): Pfad zur MP3-Datei
+            
+        Returns:
+            bool: True wenn erfolgreich, False sonst
+        """
+        try:
+            audio = eyed3.load(file_path)
+            if audio.tag is None:
+                logging.info(f"Keine Tags in {os.path.basename(file_path)} vorhanden")
+                return True
+            
+            # Zähle vorhandene Cover
+            initial_count = len(audio.tag.images) if audio.tag.images else 0
+            
+            if initial_count == 0:
+                logging.info(f"Keine Cover in {os.path.basename(file_path)} zum Entfernen")
+                return True
+            
+            # Entferne alle Cover-Bilder - verwende bewährte Methode aus embed_cover_art
+            images_to_remove = []
+            for img in list(audio.tag.images):
+                images_to_remove.append(img.description)
+            
+            # Entferne alle gefundenen Bilder
+            for description in images_to_remove:
+                try:
+                    audio.tag.images.remove(description)
+                    logging.info(f"Cover mit Description '{description}' entfernt")
+                except Exception as e:
+                    logging.warning(f"Konnte Cover mit Description '{description}' nicht entfernen: {e}")
+            
+            # Speichere Änderungen
+            audio.tag.save()
+            
+            # Verifikation
+            audio_verify = eyed3.load(file_path)
+            final_count = len(audio_verify.tag.images) if audio_verify.tag and audio_verify.tag.images else 0
+            
+            if final_count == 0:
+                logging.info(f"✅ Alle {initial_count} Cover erfolgreich entfernt aus: {os.path.basename(file_path)}")
+                return True
+            else:
+                logging.warning(f"⚠️ Nur {initial_count - final_count} von {initial_count} Cover entfernt aus: {os.path.basename(file_path)}")
+                return False
+            
+        except Exception as e:
+            logging.error(f"❌ Cover-Entfernung fehlgeschlagen für {file_path}: {str(e)}")
+            return False
+            
+            # Verifikation
+            audio_verify = eyed3.load(file_path)
+            final_count = len(audio_verify.tag.images) if audio_verify.tag and audio_verify.tag.images else 0
+            
+            if final_count == 0:
+                logging.info(f"✅ Alle {initial_count} Cover erfolgreich entfernt aus: {os.path.basename(file_path)}")
+                return True
+            else:
+                logging.warning(f"⚠️ Nur {initial_count - final_count} von {initial_count} Cover entfernt aus: {os.path.basename(file_path)}")
+                return False
+            
+        except Exception as e:
+            logging.error(f"❌ Cover-Entfernung fehlgeschlagen für {file_path}: {str(e)}")
+            return False
+
 
 def group_by_directory(files_data):
     """Gruppiert Dateien nach Verzeichnis"""

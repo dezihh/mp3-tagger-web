@@ -72,6 +72,10 @@ class OnlineMetadataProvider:
         
         self.last_request[service] = time.time()
     
+    def _wait_for_rate_limit(self, service):
+        """Wartet bei Rate-Limiting (Alias für _respect_rate_limit)"""
+        self._respect_rate_limit(service)
+    
     def search_metadata(self, filename, current_artist=None, current_title=None, current_album=None):
         """
         Sucht Metadaten für eine Audio-Datei
@@ -758,3 +762,185 @@ class OnlineMetadataProvider:
         logging.info(f"Kombinierte Ergebnisse: {primary_source} (conf={primary['confidence']:.2f}) + {secondary_source} (conf={secondary['confidence']:.2f}) = {combined['source']}")
         
         return combined
+
+    def get_detailed_genre_analysis(self, artist, title):
+        """
+        Detaillierte Genre-Analyse mit Subgenres und Klassifikation
+        
+        Args:
+            artist (str): Künstlername
+            title (str): Songtitel
+            
+        Returns:
+            dict: Detaillierte Genre-Informationen
+        """
+        try:
+            self._wait_for_rate_limit('lastfm')
+            
+            if not self.lastfm_key:
+                return None
+                
+            # Last.fm Track-Info für detaillierte Genres
+            url = "http://ws.audioscrobbler.com/2.0/"
+            params = {
+                'method': 'track.getInfo',
+                'api_key': self.lastfm_key,
+                'artist': artist,
+                'track': title,
+                'format': 'json'
+            }
+            
+            response = requests.get(url, params=params)
+            if response.status_code == 200:
+                data = response.json()
+                
+                if 'track' in data:
+                    track = data['track']
+                    
+                    # Sammle Tags als Genre-Information
+                    genres = []
+                    subgenres = []
+                    
+                    if 'toptags' in track and 'tag' in track['toptags']:
+                        tags = track['toptags']['tag']
+                        if isinstance(tags, list):
+                            for tag in tags[:10]:  # Top 10 Tags
+                                tag_name = tag.get('name', '').lower()
+                                
+                                # Klassifiziere als Hauptgenre oder Subgenre
+                                main_genres = ['rock', 'pop', 'jazz', 'classical', 'electronic', 'hip hop', 'country', 'blues', 'folk', 'metal']
+                                
+                                if any(main in tag_name for main in main_genres):
+                                    genres.append(tag.get('name'))
+                                else:
+                                    subgenres.append(tag.get('name'))
+                    
+                    return {
+                        'primary_genre': genres[0] if genres else None,
+                        'secondary_genres': genres[1:4] if len(genres) > 1 else [],
+                        'subgenres': subgenres[:5],  # Top 5 Subgenres
+                        'all_tags': [tag.get('name') for tag in (track.get('toptags', {}).get('tag', []) if isinstance(track.get('toptags', {}).get('tag', []), list) else [])][:10]
+                    }
+            
+            return None
+            
+        except Exception as e:
+            logging.error(f"Detailed Genre Analysis Error: {str(e)}")
+            return None
+
+    def get_mood_and_era_analysis(self, artist, title):
+        """
+        Mood und Era Analyse basierend auf Last.fm Tags
+        
+        Args:
+            artist (str): Künstlername
+            title (str): Songtitel
+            
+        Returns:
+            dict: Mood und Era Informationen
+        """
+        try:
+            self._wait_for_rate_limit('lastfm')
+            
+            if not self.lastfm_key:
+                return None
+                
+            # Artist-Info für Era und Style
+            artist_url = "http://ws.audioscrobbler.com/2.0/"
+            artist_params = {
+                'method': 'artist.getInfo',
+                'api_key': self.lastfm_key,
+                'artist': artist,
+                'format': 'json'
+            }
+            
+            artist_response = requests.get(artist_url, params=artist_params)
+            
+            mood_keywords = []
+            era_info = None
+            atmospheric_tags = []
+            
+            if artist_response.status_code == 200:
+                artist_data = artist_response.json()
+                
+                if 'artist' in artist_data and 'tags' in artist_data['artist']:
+                    tags = artist_data['artist']['tags'].get('tag', [])
+                    if isinstance(tags, list):
+                        for tag in tags:
+                            tag_name = tag.get('name', '').lower()
+                            
+                            # Mood-Kategorisierung
+                            if any(mood in tag_name for mood in ['happy', 'sad', 'energetic', 'mellow', 'aggressive', 'peaceful', 'dark', 'uplifting']):
+                                mood_keywords.append(tag.get('name'))
+                            
+                            # Era-Erkennung
+                            if any(era in tag_name for era in ['60s', '70s', '80s', '90s', '2000s', '2010s', 'classic', 'modern', 'contemporary']):
+                                if not era_info:
+                                    era_info = tag.get('name')
+                            
+                            # Atmosphärische Tags
+                            if any(atmo in tag_name for atmo in ['atmospheric', 'ambient', 'dreamy', 'intense', 'dramatic', 'romantic', 'nostalgic']):
+                                atmospheric_tags.append(tag.get('name'))
+            
+            # Bestimme dominante Mood
+            dominant_mood = None
+            if mood_keywords:
+                # Priorisiere bestimmte Moods
+                priority_moods = ['happy', 'sad', 'energetic', 'mellow']
+                for priority in priority_moods:
+                    if any(priority in mood.lower() for mood in mood_keywords):
+                        dominant_mood = next(mood for mood in mood_keywords if priority in mood.lower())
+                        break
+                if not dominant_mood:
+                    dominant_mood = mood_keywords[0]
+            
+            return {
+                'mood': dominant_mood,
+                'era': era_info,
+                'atmospheric_tags': atmospheric_tags[:3],  # Top 3
+                'all_mood_tags': mood_keywords[:5]  # Top 5 für Referenz
+            } if mood_keywords or era_info or atmospheric_tags else None
+            
+        except Exception as e:
+            logging.error(f"Mood/Era Analysis Error: {str(e)}")
+            return None
+
+    def get_similar_artists(self, artist):
+        """
+        Holt ähnliche Künstler für Vergleiche
+        
+        Args:
+            artist (str): Künstlername
+            
+        Returns:
+            list: Liste ähnlicher Künstler
+        """
+        try:
+            self._wait_for_rate_limit('lastfm')
+            
+            if not self.lastfm_key:
+                return []
+                
+            url = "http://ws.audioscrobbler.com/2.0/"
+            params = {
+                'method': 'artist.getSimilar',
+                'api_key': self.lastfm_key,
+                'artist': artist,
+                'limit': 10,
+                'format': 'json'
+            }
+            
+            response = requests.get(url, params=params)
+            if response.status_code == 200:
+                data = response.json()
+                
+                if 'similarartists' in data and 'artist' in data['similarartists']:
+                    similar = data['similarartists']['artist']
+                    if isinstance(similar, list):
+                        return [artist.get('name') for artist in similar if artist.get('name')]
+            
+            return []
+            
+        except Exception as e:
+            logging.error(f"Similar Artists Error: {str(e)}")
+            return []

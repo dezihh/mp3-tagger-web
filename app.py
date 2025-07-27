@@ -341,5 +341,157 @@ def recognize_album():
         logging.error(f"Album-Erkennung fehlgeschlagen: {str(e)}")
         return jsonify({'success': False, 'error': str(e)})
 
+@app.route('/enrich_data', methods=['POST'])
+def enrich_data():
+    """Erweiterte Datenanreicherung für markierte Dateien"""
+    try:
+        data = request.get_json()
+        files = data.get('files', [])
+        
+        if not files:
+            return jsonify({'success': False, 'error': 'Keine Dateien ausgewählt'})
+        
+        from tagger.metadata_enrichment import MetadataEnrichmentService
+        enrichment_service = MetadataEnrichmentService()
+        
+        enriched_files = []
+        
+        for file_info in files:
+            file_path = file_info.get('path')
+            
+            if not file_path or not os.path.exists(file_path):
+                continue
+            
+            try:
+                # Erstelle File-Data-Struktur für Anreicherung
+                file_data = {
+                    'path': file_path,
+                    'filename': os.path.basename(file_path),
+                    'current_artist': file_info.get('artist', ''),
+                    'current_title': file_info.get('title', ''),
+                    'current_album': file_info.get('album', ''),
+                    'current_track_num': file_info.get('track', '')
+                }
+                
+                # Führe umfassende Anreicherung durch
+                logging.info(f"🌐 Starte Datenanreicherung für: {os.path.basename(file_path)}")
+                enriched_data = enrichment_service.enrich_file_metadata(file_data)
+                
+                if enriched_data:
+                    # Strukturiere Antwort für Frontend
+                    enriched_file = {
+                        'path': file_path,
+                        'original_artist': file_info.get('artist', ''),
+                        'original_title': file_info.get('title', ''),
+                        'original_album': file_info.get('album', ''),
+                        'enriched_artist': enriched_data.get('artist', file_info.get('artist', '')),
+                        'enriched_title': enriched_data.get('title', file_info.get('title', '')),
+                        'enriched_album': enriched_data.get('album', file_info.get('album', '')),
+                        'enriched_genre': enriched_data.get('genre'),
+                        'detailed_genre': enriched_data.get('detailed_genre'),
+                        'mood': enriched_data.get('mood'),
+                        'era': enriched_data.get('era'),
+                        'musicbrainz_id': enriched_data.get('musicbrainz_id'),
+                        'release_date': enriched_data.get('release_date'),
+                        'cover_candidates': enriched_data.get('cover_candidates', []),
+                        'existing_cover': enriched_data.get('existing_cover', {'has_cover': False}),
+                        'suggested_cover_url': enriched_data.get('suggested_cover_url'),  # FIX: Fehlende Cover-URL
+                        'cover_preview_available': enriched_data.get('cover_preview_available', False),
+                        'atmospheric_tags': enriched_data.get('atmospheric_tags', []),
+                        'similar_artists': enriched_data.get('similar_artists', [])
+                    }
+                    
+                    enriched_files.append(enriched_file)
+                    logging.info(f"✅ Anreicherung erfolgreich für: {os.path.basename(file_path)}")
+                else:
+                    logging.warning(f"❌ Keine Anreicherung möglich für: {os.path.basename(file_path)}")
+                    
+            except Exception as e:
+                logging.error(f"Fehler bei Anreicherung von {file_path}: {str(e)}")
+                continue
+        
+        return jsonify({
+            'success': True,
+            'enriched_files': enriched_files,
+            'total_processed': len(enriched_files),
+            'total_requested': len(files)
+        })
+        
+    except Exception as e:
+        logging.error(f"Datenanreicherung fehlgeschlagen: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/preview_cover', methods=['POST'])
+def preview_cover():
+    """Cover-Vorschau für URL ohne Einbettung"""
+    try:
+        import requests
+        import base64
+        
+        data = request.get_json()
+        cover_url = data.get('cover_url')
+        
+        if not cover_url:
+            return jsonify({'success': False, 'error': 'Keine Cover-URL angegeben'})
+        
+        # Lade Cover-Daten für Vorschau
+        response = requests.get(cover_url, timeout=10)
+        if response.status_code == 200:
+            cover_data = base64.b64encode(response.content).decode('utf-8')
+            
+            return jsonify({
+                'success': True,
+                'cover_data': f"data:image/jpeg;base64,{cover_data}",
+                'size': len(response.content)
+            })
+        else:
+            return jsonify({'success': False, 'error': 'Cover konnte nicht geladen werden'})
+            
+    except Exception as e:
+        logging.error(f"Cover-Vorschau fehlgeschlagen: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/apply_cover', methods=['POST'])
+def apply_cover():
+    """Wendet ausgewähltes Cover auf Datei an (beim Speichern)"""
+    try:
+        import requests
+        
+        data = request.get_json()
+        file_path = data.get('file_path')
+        cover_choice = data.get('cover_choice')  # 'keep_existing', 'new_cover', oder 'remove'
+        cover_url = data.get('cover_url')  # Für neue Cover
+        
+        if not file_path or not os.path.exists(file_path):
+            return jsonify({'success': False, 'error': 'Datei nicht gefunden'})
+        
+        from tagger.core import MusicTagger
+        tagger = MusicTagger()
+        
+        if cover_choice == 'keep_existing':
+            # Nichts tun - vorhandenes Cover beibehalten
+            return jsonify({'success': True, 'action': 'kept_existing'})
+            
+        elif cover_choice == 'remove':
+            # Cover entfernen
+            success = tagger.remove_cover_art(file_path)
+            return jsonify({'success': success, 'action': 'removed'})
+            
+        elif cover_choice == 'new_cover' and cover_url:
+            # Neues Cover einbetten
+            response = requests.get(cover_url, timeout=10)
+            if response.status_code == 200:
+                cover_data = response.content
+                success = tagger.embed_cover_art(file_path, cover_data)
+                return jsonify({'success': success, 'action': 'embedded_new'})
+            else:
+                return jsonify({'success': False, 'error': 'Cover konnte nicht heruntergeladen werden'})
+        
+        return jsonify({'success': False, 'error': 'Ungültige Cover-Auswahl'})
+        
+    except Exception as e:
+        logging.error(f"Cover-Anwendung fehlgeschlagen: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)})
+
 if __name__ == '__main__':
     app.run(debug=True)

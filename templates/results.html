@@ -28,7 +28,7 @@
             
             <div class="action-controls">
                 <button onclick="saveChanges()" class="btn btn-primary">💾 Änderungen speichern</button>
-                <button onclick="performOnlineSearch()" class="btn btn-success">🌐 Online-Erkennung für markierte Dateien</button>
+                <button onclick="performDataEnrichment()" class="btn btn-success">🌐 Daten anreichern</button>
                 <button onclick="goBack()" class="btn btn-back">🔙 Zurück</button>
             </div>
         </div>
@@ -84,8 +84,9 @@
                             <!-- Dateiname mit ID3-Details im Tooltip -->
                             <td class="col-filename">
                                 <div class="filename-info" 
-                                     onmouseover="showDetailsOnHover('{{ file.path }}')"
+                                     onmouseover="showDetailsOnHover(this.dataset.filePath)"
                                      onmouseout="hideDetailsOnHover()"
+                                     data-file-path="{{ file.path }}"
                                      style="cursor: help; color: #007bff; text-decoration: underline;">
                                     {{ file.filename }}
                                 </div>
