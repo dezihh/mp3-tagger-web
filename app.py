@@ -8,7 +8,7 @@ from flask import Flask, render_template, request, redirect, url_for, jsonify, s
 from tagger.core import MusicTagger, group_by_directory
 from tagger.metadata_enrichment import enrich_multiple_files
 from tagger.audio_recognition import recognize_audio_file
-from tagger.fingerprinting import get_audio_fingerprint_metadata
+from tagger.fingerprinting import get_audio_fingerprint_metadata, AlbumRecognitionService
 import os
 import logging
 
@@ -318,6 +318,28 @@ def enhanced_search():
     except Exception as e:
         logging.error(f"Enhanced Search fehlgeschlagen: {str(e)}")
         return f"Fehler bei der erweiterten Suche: {str(e)}", 500
+
+@app.route('/recognize_album', methods=['POST'])
+def recognize_album():
+    """Album-Erkennung für komplettes Verzeichnis"""
+    try:
+        data = request.get_json()
+        directory_path = data.get('directory_path')
+        
+        if not directory_path or not os.path.isdir(directory_path):
+            return jsonify({'success': False, 'error': 'Verzeichnis nicht gefunden'})
+        
+        # Initialisiere Album-Erkennungsservice
+        album_service = AlbumRecognitionService()
+        
+        # Führe Album-Erkennung durch
+        result = album_service.recognize_album_from_directory(directory_path)
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        logging.error(f"Album-Erkennung fehlgeschlagen: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)})
 
 if __name__ == '__main__':
     app.run(debug=True)

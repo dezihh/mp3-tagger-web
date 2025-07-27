@@ -244,6 +244,25 @@ body {
     display: flex;
     align-items: center;
     gap: 15px;
+    flex-wrap: wrap;
+}
+
+.btn-album-recognize {
+    background: linear-gradient(135deg, #8B5CF6, #A855F7);
+    color: white;
+    border: none;
+    padding: 6px 12px;
+    border-radius: 4px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+    white-space: nowrap;
+}
+
+.btn-album-recognize:hover {
+    background: linear-gradient(135deg, #7C3AED, #9333EA);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(139, 92, 246, 0.3);
 }
 
 .checkbox-container {
@@ -653,7 +672,64 @@ body {
     height: 1px;
 }
 
-/* Cover-Bild im Details Modal */
+/* Album Selection Modal */
+.album-selection-content {
+    max-width: 800px;
+    max-height: 80vh;
+    overflow-y: auto;
+}
+
+.album-candidates {
+    max-height: 400px;
+    overflow-y: auto;
+    margin: 15px 0;
+}
+
+.album-candidate {
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    padding: 15px;
+    margin-bottom: 15px;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    background: #f9f9f9;
+    transition: all 0.2s;
+}
+
+.album-candidate:hover {
+    background: #f0f0f0;
+    border-color: #8B5CF6;
+}
+
+.candidate-info h4 {
+    margin: 0 0 8px 0;
+    color: #333;
+    font-size: 16px;
+}
+
+.candidate-info p {
+    margin: 4px 0;
+    font-size: 13px;
+    color: #666;
+}
+
+.candidate-actions {
+    flex-shrink: 0;
+    margin-left: 15px;
+}
+
+.modal-footer {
+    text-align: center;
+    padding-top: 15px;
+    border-top: 1px solid #ddd;
+}
+
+/* Markierung für Zeilen mit angewendeten Album-Infos */
+.album-applied {
+    background-color: #f0f9ff !important;
+    border-left: 3px solid #8B5CF6;
+}
 .detail-cover {
     text-align: center;
     padding: 10px;

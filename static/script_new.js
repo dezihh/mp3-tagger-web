@@ -587,6 +587,232 @@ function saveChanges() {
 }
 
 /**
+ * Album-Erkennung für komplettes Verzeichnis
+ */
+function recognizeAlbum(directoryPath) {
+    console.log('Starte Album-Erkennung für:', directoryPath);
+    
+    showProcessingStatus(`🎼 Führe Album-Erkennung durch für: ${directoryPath.split('/').pop()}`);
+    
+    fetch('/recognize_album', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            directory_path: directoryPath
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        hideProcessingStatus();
+        
+        if (data.success && data.candidates && data.candidates.length > 0) {
+            showAlbumSelectionModal(data.candidates, directoryPath);
+        } else if (data.success && data.candidates.length === 0) {
+            showNotification('Keine Album-Kandidaten gefunden. Versuchen Sie die einzelne Track-Erkennung.', 'warning');
+        } else {
+            showNotification(`Album-Erkennung fehlgeschlagen: ${data.error}`, 'error');
+        }
+    })
+    .catch(error => {
+        hideProcessingStatus();
+        console.error('Album-Erkennung Fehler:', error);
+        showNotification('Fehler bei der Album-Erkennung', 'error');
+    });
+}
+
+/**
+ * Zeigt Modal mit Album-Auswahl-Optionen
+ */
+function showAlbumSelectionModal(candidates, directoryPath) {
+    // Erstelle Modal dynamisch
+    const modalHtml = `
+        <div id="album-selection-modal" class="modal" style="display: block;">
+            <div class="modal-content album-selection-content">
+                <div class="modal-header">
+                    <h3>🎼 Album-Erkennung: Kandidaten gefunden</h3>
+                    <span class="close" onclick="closeAlbumSelectionModal()">&times;</span>
+                </div>
+                <div class="modal-body">
+                    <p><strong>Verzeichnis:</strong> ${directoryPath}</p>
+                    <p>Bitte wählen Sie das passende Album aus oder verwerfen Sie alle Vorschläge:</p>
+                    
+                    <div class="album-candidates">
+                        ${candidates.map((candidate, index) => `
+                            <div class="album-candidate" data-index="${index}">
+                                <div class="candidate-info">
+                                    <h4>${candidate.album || 'Unbekanntes Album'}</h4>
+                                    <p><strong>Artist:</strong> ${candidate.artist || 'Unbekannt'}</p>
+                                    <p><strong>Jahr:</strong> ${candidate.date || 'Unbekannt'}</p>
+                                    <p><strong>Tracks:</strong> ${candidate.track_count || 'Unbekannt'}</p>
+                                    <p><strong>Land:</strong> ${candidate.country || 'Unbekannt'}</p>
+                                    <p><strong>Quelle:</strong> ${candidate.source} (Score: ${(candidate.match_score * 100).toFixed(1)}%)</p>
+                                </div>
+                                <div class="candidate-actions">
+                                    <button onclick="applyAlbumCandidate(${index}, '${directoryPath}')" class="btn btn-primary">
+                                        ✅ Verwenden
+                                    </button>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                    
+                    <div class="modal-footer">
+                        <button onclick="closeAlbumSelectionModal()" class="btn btn-secondary">
+                            ❌ Alle verwerfen
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    // Entferne existierendes Modal falls vorhanden
+    const existingModal = document.getElementById('album-selection-modal');
+    if (existingModal) {
+        existingModal.remove();
+    }
+    
+    // Füge neues Modal hinzu
+    document.body.insertAdjacentHTML('beforeend', modalHtml);
+    
+    // Speichere Kandidaten für späteren Zugriff
+    window.albumCandidates = candidates;
+}
+
+/**
+ * Wendet ausgewählten Album-Kandidaten an
+ */
+function applyAlbumCandidate(candidateIndex, directoryPath) {
+    const candidate = window.albumCandidates[candidateIndex];
+    
+    if (!candidate) {
+        showNotification('Fehler: Kandidat nicht gefunden', 'error');
+        return;
+    }
+    
+    console.log('Wende Album-Kandidat an:', candidate);
+    
+    showProcessingStatus('Wende Album-Informationen auf alle Dateien im Verzeichnis an...');
+    
+    // Finde alle Zeilen für dieses Verzeichnis
+    const directoryRows = document.querySelectorAll(`tr[data-file-path^="${directoryPath}"]`);
+    
+    // Sortiere Zeilen nach intelligenter Track-Erkennung
+    const rowsWithTrackInfo = Array.from(directoryRows).map(row => {
+        const fileName = row.dataset.filePath.split('/').pop();
+        const trackNumber = extractTrackNumberFromFilename(fileName);
+        return {
+            row: row,
+            fileName: fileName,
+            detectedTrack: trackNumber,
+            originalOrder: Array.from(directoryRows).indexOf(row)
+        };
+    });
+    
+    // Sortiere: Erst nach erkannter Track-Nummer, dann alphabetisch
+    rowsWithTrackInfo.sort((a, b) => {
+        if (a.detectedTrack && b.detectedTrack) {
+            return a.detectedTrack - b.detectedTrack;
+        } else if (a.detectedTrack) {
+            return -1;
+        } else if (b.detectedTrack) {
+            return 1;
+        } else {
+            return a.fileName.toLowerCase().localeCompare(b.fileName.toLowerCase());
+        }
+    });
+    
+    console.log(`Wende Album-Info auf ${rowsWithTrackInfo.length} Dateien an`);
+    
+    // Wende Album-Info auf alle Dateien an
+    rowsWithTrackInfo.forEach((item, index) => {
+        const row = item.row;
+        const albumInput = row.querySelector('[data-field="album"]');
+        const artistInput = row.querySelector('[data-field="artist"]');
+        const trackInput = row.querySelector('[data-field="track"]');
+        
+        if (albumInput && candidate.album) {
+            albumInput.value = candidate.album;
+        }
+        
+        if (artistInput && candidate.artist) {
+            // Nur setzen wenn Artist-Feld leer ist
+            if (!artistInput.value.trim()) {
+                artistInput.value = candidate.artist;
+            }
+        }
+        
+        // Setze Track-Nummer: Verwende erkannte Nummer oder sequenziell
+        if (trackInput) {
+            let trackNumber;
+            if (item.detectedTrack) {
+                trackNumber = item.detectedTrack.toString().padStart(2, '0');
+                console.log(`Erkannte Track-Nummer verwendet: ${trackNumber} für ${item.fileName}`);
+            } else {
+                trackNumber = (index + 1).toString().padStart(2, '0');
+                console.log(`Sequenzielle Track-Nummer gesetzt: ${trackNumber} für ${item.fileName}`);
+            }
+            trackInput.value = trackNumber;
+        }
+        
+        // Markiere Zeile als geändert
+        row.classList.add('album-applied');
+        
+        // Markiere Checkbox
+        const checkbox = row.querySelector('.file-checkbox');
+        if (checkbox) {
+            checkbox.checked = true;
+        }
+    });
+    
+    hideProcessingStatus();
+    closeAlbumSelectionModal();
+    
+    showNotification(`Album-Informationen mit Track-Nummern angewendet: "${candidate.album}" von ${candidate.artist} (${rowsWithTrackInfo.length} Tracks)`, 'success');
+}
+
+/**
+ * Extrahiert Track-Nummer aus Dateiname
+ */
+function extractTrackNumberFromFilename(fileName) {
+    // Verschiedene Patterns für Track-Nummern
+    const patterns = [
+        /^(\d+)[\s\-\.]/,           // "01 - Title" oder "01. Title" 
+        /^(\d+)[\s]*\-/,            // "01-Title" oder "01 -Title"
+        /^\w+\s*-\s*(\d+)/,         // "Artist - 01"
+        /(\d+)[\s]*\-[\s]*\w+/,     // "01 - Title"
+        /^(\d{2})/,                 // Erste zwei Ziffern
+        /[\s\-\.\_](\d{2})[\s\-\.\_]/, // " 01 " oder "-01-" oder ".01."
+    ];
+    
+    for (const pattern of patterns) {
+        const match = fileName.match(pattern);
+        if (match) {
+            const trackNum = parseInt(match[1], 10);
+            if (trackNum > 0 && trackNum <= 99) {
+                return trackNum;
+            }
+        }
+    }
+    
+    return null;
+}
+
+/**
+ * Schließt Album-Auswahl Modal
+ */
+function closeAlbumSelectionModal() {
+    const modal = document.getElementById('album-selection-modal');
+    if (modal) {
+        modal.remove();
+    }
+    // Cleanup
+    window.albumCandidates = null;
+}
+
+/**
  * Alle markierten Dateien sammeln
  */
 function getSelectedFiles() {
