@@ -1,68 +1,19 @@
 <!DOCTYPE html>
-<html>
+<html lang="de">
 <head>
-    <title>MP3 Tagger - Verzeichnis Auswahl</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='styles_new.css') }}">
+    <meta charset="UTF-8">
+    <title>MP3 Tagger Web - Verzeichnis wählen</title>
+    <link rel="stylesheet" href="/static/styles.css">
 </head>
 <body>
-    <div class="container">
-        <h1>MP3 Tagging Tool</h1>
-        <p class="description">Wählen Sie das Quellverzeichnis für die MP3-Dateien aus</p>
-        
-        <form method="POST" class="directory-form">
-            <div class="input-group">
-                <label for="directory">Verzeichnis:</label>
-                <div class="directory-input">
-                    <input type="text" id="directory" name="directory" 
-                           placeholder="Pfad zum MP3-Verzeichnis eingeben..." required>
-                    <button type="button" id="browse-btn" class="browse-button">
-                        📁 Durchsuchen
-                    </button>
-                </div>
-            </div>
-            
-            <div class="submit-group">
-                <button type="submit" class="scan-button">🔍 MP3-Dateien scannen</button>
-            </div>
-        </form>
-        
-        <div class="info-box">
-            <h3>Funktionen:</h3>
-            <ul>
-                <li>Verzeichnis-basierte MP3-Analyse</li>
-                <li>ID3-Tag Erkennung und Anreicherung</li>
-                <li>Audio-Fingerprinting für unbekannte Dateien</li>
-                <li>Cover-Art Integration</li>
-                <li>Manuelle Metadaten-Bearbeitung</li>
-            </ul>
-        </div>
-    </div>
-    
-    <!-- Directory Browser Modal (placeholder for future implementation) -->
-    <div id="directory-modal" class="modal" style="display: none;">
-        <div class="modal-content">
-            <h3>Verzeichnis auswählen</h3>
-            <p>Browser-basierte Verzeichnisauswahl wird in einer zukünftigen Version implementiert.</p>
-            <button onclick="closeModal()">Schließen</button>
-        </div>
-    </div>
-    
-    <script>
-        document.getElementById('browse-btn').addEventListener('click', function() {
-            // Placeholder für Verzeichnis-Browser
-            document.getElementById('directory-modal').style.display = 'block';
-        });
-        
-        function closeModal() {
-            document.getElementById('directory-modal').style.display = 'none';
-        }
-        
-        // ESC to close modal
-        document.addEventListener('keydown', function(e) {
-            if (e.key === 'Escape') {
-                closeModal();
-            }
-        });
-    </script>
+    <h1>MP3 Tagger Web</h1>
+    <form method="post">
+        <label for="mp3_dir">Quellverzeichnis der MP3-Dateien:</label>
+        <input type="text" id="mp3_dir" name="mp3_dir" value="{{ mp3_dir }}" size="50" required>
+        <button type="submit">Verzeichnis laden</button>
+    </form>
+    {% if error %}
+        <div style="color: red; margin-top: 10px;">{{ error }}</div>
+    {% endif %}
 </body>
 </html>

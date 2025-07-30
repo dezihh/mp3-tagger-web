@@ -1,396 +1,65 @@
 body {
     font-family: Arial, sans-serif;
-    font-size: 13px;
+    background: #f7f7f7;
     margin: 0;
-    padding: 15px;
-    background: #f5f5f5;
+    padding: 0;
 }
 
-.directory-group {
-    background: white;
-    margin-bottom: 20px;
-    border-radius: 5px;
-    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-    overflow: hidden;
-}
-
-.directory-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 10px 15px;
-    background: #2c3e50;
-    color: white;
-}
-
-.directory-header h2 {
-    margin: 0;
-    font-size: 16px;
-}
-
-.directory-checkbox {
-    color: white;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-
-th, td {
-    padding: 6px 8px;
-    text-align: left;
-    border-bottom: 1px solid #eee;
-    font-size: 13px;
-    vertical-align: top;
-}
-
-th {
-    background: #ecf0f1;
-    position: sticky;
-    top: 0;
-    font-weight: bold;
-    font-size: 12px;
-}
-
-/* Spaltenbreiten */
-.filename-col {
-    width: 12%;
-    max-width: 140px;
-}
-
-.tag-col {
-    width: 9%;
-    max-width: 110px;
-}
-
-.classification-col {
-    width: 11%;
-    max-width: 130px;
-}
-
-.cover-col {
-    width: 7%;
-    max-width: 70px;
-}
-
-.target-col {
-    width: 15%;
-    max-width: 180px;
-}
-
-.compact {
-    width: 4%;
-    max-width: 50px;
-    text-align: center;
-}
-
-.center {
-    text-align: center;
-}
-
-.filename {
-    max-width: 140px;
-    word-break: break-word;
-    font-size: 12px;
-}
-
-.tag-cell {
-    max-width: 120px;
-    position: relative;
-    padding: 4px 6px;
-}
-
-.tag-content {
-    max-width: 100%;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    font-size: 12px;
-}
-
-.tag-tooltip {
-    display: none;
-    position: fixed;  /* Statt absolute - damit es nicht durch Tabelle beschränkt wird */
-    z-index: 1000;    /* Höherer z-index */
-    background: #ffffff;
-    border: 1px solid #ccc;
-    padding: 15px;
-    width: 450px;     /* Etwas breiter */
-    box-shadow: 0 5px 20px rgba(0,0,0,0.25);  /* Stärkerer Schatten */
-    border-radius: 8px;
-    max-height: 400px;  /* Höher */
-    overflow-y: auto;
-    font-size: 13px;
-    line-height: 1.4;
-    /* Smooth Transition */
-    opacity: 0;
-    transition: opacity 0.2s ease-in-out;
-    pointer-events: none; /* Verhindert Interferenz mit Mausevents */
-}
-
-/* Tooltip sichtbar machen */
-.tag-cell:hover .tag-tooltip,
-.cover-info:hover .tag-tooltip {
-    opacity: 1;
-}
-
-/* Tooltip-Header Styling */
-.tag-tooltip h4 {
-    margin: 0 0 10px 0;
-    padding: 0 0 8px 0;
-    border-bottom: 2px solid #3498db;
+h1 {
     color: #2c3e50;
-    font-size: 14px;
+    text-align: center;
+    margin-top: 40px;
+}
+
+form {
+    background: #fff;
+    padding: 24px;
+    margin: 40px auto;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+    max-width: 480px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    box-sizing: border-box;
+}
+/* Eingabefeld und Button nebeneinander, Begrenzung beachten */
+
+
+label {
     font-weight: bold;
-}
-
-/* Tooltip-Inhalt */
-.tag-tooltip pre {
-    background: #f8f9fa;
-    padding: 10px;
-    border-radius: 4px;
-    margin: 8px 0;
-    font-size: 12px;
-    line-height: 1.3;
-    white-space: pre-wrap;
-    word-wrap: break-word;
-}
-
-/* Tooltip-Paragraphen */
-.tag-tooltip p {
-    margin: 5px 0;
     color: #34495e;
 }
 
-.tag-cell:hover .tag-tooltip {
-    display: block;
-}
-
-.cover-tooltip {
-    max-width: 100%;
-    max-height: 200px;
-    margin-top: 10px;
-}
-
-.target-path {
-    max-width: 180px;
-    word-break: break-all;
-    font-family: monospace;
-    font-size: 11px;
-}
-
-.action-cell {
-    text-align: center;
-}
-
-.compact {
-    width: 4%;
-    max-width: 50px;
-    text-align: center;
-}
-
-/* Responsive Tabelle */
-table {
-    width: 100%;
-    border-collapse: collapse;
-    table-layout: fixed;
-    font-size: 12px;
-}
-
-/* Scroll für sehr breite Tabellen */
-.directory-group {
-    background: white;
-    margin-bottom: 20px;
-    border-radius: 5px;
-    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-    overflow: hidden;
-    overflow-x: auto;
-}
-
-/* Verbesserte Checkbox-Darstellung */
-input[type="checkbox"] {
-    transform: scale(1.2);
-    cursor: pointer;
-    margin: 0;
-}
-
-/* Kompakte Zeilenabstände */
-tbody tr {
-    height: 28px;
-}
-
-tbody tr:hover {
-    background-color: #f8f9fa;
-}
-
-/* Bessere Textdarstellung für lange Inhalte */
-.tag-content:hover {
-    background-color: #fff3cd;
-    cursor: help;
-}
-
-/* Container-Anpassungen für mehr Platz */
-.container {
-    max-width: 1900px;
-    margin: 0 auto;
-    padding: 15px;
-}
-
-/* Cover-Info Styling */
-.cover-info {
-    font-size: 11px;
-    text-align: center;
-    position: relative;
-}
-
-.cover-display {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 1px;
-}
-
-.cover-type {
-    font-weight: bold;
-    color: #2c3e50;
-}
-
-.cover-resolution {
-    color: #7f8c8d;
-    font-size: 10px;
-}
-
-.cover-count {
-    color: #e67e22;
-    font-size: 9px;
-}
-
-.no-cover {
-    color: #bdc3c7;
-    font-style: italic;
-}
-
-.actions {
-    margin: 20px 0;
-    text-align: right;
-}
-
-#apply-selected {
-    padding: 10px 20px;
-    background: #27ae60;
-    color: white;
-    border: none;
+input[type="text"] {
+    padding: 8px;
+    border: 1px solid #ccc;
     border-radius: 4px;
+    font-size: 1em;
+}
+
+button {
+    background: #2980b9;
+    color: #fff;
+    border: none;
+    padding: 10px 18px;
+    border-radius: 4px;
+    font-size: 1em;
     cursor: pointer;
+    transition: background 0.2s;
 }
 
-/* Checkbox Styling */
-input[type="checkbox"] {
-    transform: scale(1.3);
-    cursor: pointer;
-}
-
-/* Erweiterte Metadaten-Anzeige */
-.metadata-enhanced .tag-tooltip h4 {
-    color: #27ae60;
-    border-bottom: 1px solid #27ae60;
-    padding-bottom: 3px;
-    margin-bottom: 8px;
-}
-
-.metadata-enhanced .metadata-ids {
-    background: #f8f9fa;
-    padding: 5px;
-    margin: 5px 0;
-    border-radius: 3px;
-    font-size: 11px;
-    color: #666;
-}
-
-.metadata-enhanced .metadata-source {
-    display: inline-block;
+button:hover {
     background: #3498db;
-    color: white;
-    padding: 2px 6px;
-    border-radius: 10px;
-    font-size: 10px;
-    margin-bottom: 5px;
 }
 
-.metadata-enhanced .confidence-high {
-    background: #27ae60;
-}
-
-.metadata-enhanced .confidence-medium {
-    background: #f39c12;
-}
-
-.metadata-enhanced .confidence-low {
-    background: #e74c3c;
-}
-
-/* Online Cover Anzeige */
-.cover-display .cover-resolution {
-    font-size: 10px;
-    opacity: 0.8;
-}
-
-/* Genres-Anzeige */
-.genres-list {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 3px;
-    margin-top: 5px;
-}
-
-.genre-tag {
-    background: #ecf0f1;
-    padding: 1px 4px;
-    border-radius: 8px;
-    font-size: 10px;
-    color: #2c3e50;
-}
-
-/* Erweiterte Klassifizierung */
-.classification-cell {
-    font-size: 11px;
-    line-height: 1.3;
-}
-
-.classification-content {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-}
-
-.class-era {
-    background: #3498db;
-    color: white;
-    padding: 1px 4px;
-    border-radius: 2px;
-    font-size: 10px;
-    font-weight: bold;
+div[style*="color: red"] {
+    margin: 0 auto;
+    max-width: 480px;
+    background: #ffeaea;
+    border: 1px solid #e74c3c;
+    color: #c0392b;
+    padding: 10px;
+    border-radius: 4px;
     text-align: center;
-}
-
-.class-mood {
-    background: #e74c3c;
-    color: white;
-    padding: 1px 4px;
-    border-radius: 2px;
-    font-size: 10px;
-    text-align: center;
-}
-
-.class-style {
-    background: #9b59b6;
-    color: white;
-    padding: 1px 4px;
-    border-radius: 2px;
-    font-size: 10px;
-    text-align: center;
-}
-
-.no-classification {
-    color: #999;
-    font-style: italic;
 }
