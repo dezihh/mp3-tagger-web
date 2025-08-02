@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MP3 Tagger Web - Ergebnisse</title>
-    <link rel="stylesheet" href="/static/styles.css">
+    <link rel="stylesheet" href="/static/styles_optimized.css">
 </head>
 <body>
     <div class="results-header">
@@ -28,6 +28,9 @@
         <div class="action-buttons">
             <button class="btn btn-primary" id="batch-process" disabled>
                 Ausgewählte verarbeiten (0)
+            </button>
+            <button id="batchSaveBtn" class="btn btn-success" disabled>
+                <span id="saveCount">0</span> Dateien speichern
             </button>
             <a href="/" class="btn btn-secondary">← Zurück</a>
         </div>
@@ -113,27 +116,49 @@
     </div>
 
     <!-- Audio Player (versteckt) -->
-    <audio id="audio-player" preload="none"></audio>
+        </div>
+
+    <!-- Progress Overlay für Speichern -->
+    <div id="saveProgressOverlay" class="save-progress-overlay">
+        <div class="save-progress-box">
+            <div class="save-progress-title">💾 Tags werden gespeichert...</div>
+            <div class="save-progress-bar">
+                <div id="saveProgressFill" class="save-progress-fill"></div>
+            </div>
+            <div id="saveProgressText" class="save-progress-text">Vorbereitung...</div>
+            <div id="saveProgressStatus" class="save-progress-status"></div>
+        </div>
+    </div>
+
+    <audio id="audio-player" style="display: none;" controls></audio>
 
     <script>
-        // Globale Variablen
+        /* ==========================================
+           MP3 TAGGER WEB - OPTIMIZED JAVASCRIPT
+           ========================================== */
+
+        // Globale Variablen für Zustandsverwaltung
         let selectedFiles = new Set();
         let currentAudio = null;
         let currentPlayButton = null;
         let tooltipElement = null;
         let tooltipTimeout = null;
 
-        // DOM Ready
+        // DOM Ready - Initialisierung aller Funktionen
         document.addEventListener('DOMContentLoaded', function() {
             initializeControls();
+            initializeAutoCheckbox();
             initializePlayback();
             initializeTooltips();
+            initializeSaveFunction();
             updateBatchButton();
         });
 
-        // Initialisierung der Auswahlkontrollen
+        /* === AUSWAHLKONTROLLE SYSTEM ===
+         * Verwaltet Checkboxen auf drei Ebenen: Global, Directory, Individual
+         */
         function initializeControls() {
-            // Globale "Alle auswählen/abwählen"
+            // Globale "Alle auswählen/abwählen" Checkbox
             const globalSelect = document.getElementById('select-all-global');
             globalSelect.addEventListener('change', function() {
                 const checkboxes = document.querySelectorAll('.file-checkbox');
@@ -145,7 +170,7 @@
                 updateBatchButton();
             });
 
-            // Verzeichnis-spezifische "Alle auswählen/abwählen"
+            // Verzeichnis-spezifische Auswahl
             const directorySelects = document.querySelectorAll('.select-all-directory');
             directorySelects.forEach(select => {
                 select.addEventListener('change', function() {
@@ -173,7 +198,29 @@
             });
         }
 
-        // Datei-Auswahl umschalten
+        /* === AUTO-CHECKBOX FUNKTION ===
+         * Aktiviert automatisch Checkbox bei Änderungen in Eingabefeldern
+         */
+        function initializeAutoCheckbox() {
+            const inputFields = document.querySelectorAll('.title-input, .artist-input, .album-input, .year-input, .track-input, .genre-input');
+            inputFields.forEach(input => {
+                input.addEventListener('input', function() {
+                    const row = this.closest('.mp3-row');
+                    const checkbox = row.querySelector('.file-checkbox');
+                    const filepath = checkbox.dataset.filepath;
+                    
+                    if (!checkbox.checked) {
+                        checkbox.checked = true;
+                        toggleFileSelection(filepath, true);
+                        updateDirectorySelects();
+                        updateGlobalSelect();
+                        updateBatchButton();
+                    }
+                });
+            });
+        }
+
+        /* === HILFSFUNKTIONEN FÜR AUSWAHL-MANAGEMENT === */
         function toggleFileSelection(filepath, selected) {
             if (selected) {
                 selectedFiles.add(filepath);
@@ -182,7 +229,6 @@
             }
         }
 
-        // Verzeichnis-Auswahl-Status aktualisieren
         function updateDirectorySelects() {
             const directorySelects = document.querySelectorAll('.select-all-directory');
             directorySelects.forEach(select => {
@@ -190,47 +236,38 @@
                 const checkboxes = document.querySelectorAll(`.file-checkbox[data-directory="${directory}"]`);
                 const checkedBoxes = document.querySelectorAll(`.file-checkbox[data-directory="${directory}"]:checked`);
                 
-                if (checkedBoxes.length === 0) {
-                    select.indeterminate = false;
-                    select.checked = false;
-                } else if (checkedBoxes.length === checkboxes.length) {
-                    select.indeterminate = false;
-                    select.checked = true;
-                } else {
-                    select.indeterminate = true;
-                    select.checked = false;
-                }
+                select.indeterminate = checkedBoxes.length > 0 && checkedBoxes.length < checkboxes.length;
+                select.checked = checkedBoxes.length > 0;
             });
         }
 
-        // Globale Auswahl-Status aktualisieren
         function updateGlobalSelect() {
             const globalSelect = document.getElementById('select-all-global');
             const allCheckboxes = document.querySelectorAll('.file-checkbox');
             const checkedBoxes = document.querySelectorAll('.file-checkbox:checked');
             
-            if (checkedBoxes.length === 0) {
-                globalSelect.indeterminate = false;
-                globalSelect.checked = false;
-            } else if (checkedBoxes.length === allCheckboxes.length) {
-                globalSelect.indeterminate = false;
-                globalSelect.checked = true;
-            } else {
-                globalSelect.indeterminate = true;
-                globalSelect.checked = false;
-            }
+            globalSelect.indeterminate = checkedBoxes.length > 0 && checkedBoxes.length < allCheckboxes.length;
+            globalSelect.checked = checkedBoxes.length > 0;
         }
 
-        // Batch-Button aktualisieren
         function updateBatchButton() {
             const batchButton = document.getElementById('batch-process');
+            const saveBtn = document.getElementById('batchSaveBtn');
+            const saveCount = document.getElementById('saveCount');
             const count = selectedFiles.size;
             
             batchButton.textContent = `Ausgewählte verarbeiten (${count})`;
             batchButton.disabled = count === 0;
+
+            if (saveBtn && saveCount) {
+                saveBtn.disabled = count === 0;
+                saveCount.textContent = count;
+            }
         }
 
-        // Playback-Funktionalität initialisieren
+        /* === AUDIO PLAYBACK SYSTEM ===
+         * Verwaltet MP3-Wiedergabe mit Play/Pause-Buttons
+         */
         function initializePlayback() {
             const playButtons = document.querySelectorAll('.play-btn');
             const audioPlayer = document.getElementById('audio-player');
@@ -243,54 +280,65 @@
             });
         }
 
-        // Playback umschalten
         function togglePlayback(button, filepath, audioPlayer) {
+            // Aktuellen Track stoppen wenn derselbe Button geklickt
             if (currentAudio && !currentAudio.paused && currentPlayButton === button) {
-                // Stoppe aktuellen Track
                 currentAudio.pause();
-                button.textContent = "▶";
-                button.classList.remove('playing');
+                resetPlayButton(button);
                 currentAudio = null;
                 currentPlayButton = null;
-            } else {
-                // Stoppe anderen Track falls vorhanden
-                if (currentAudio) {
-                    currentAudio.pause();
-                    if (currentPlayButton) {
-                        currentPlayButton.textContent = "▶";
-                        currentPlayButton.classList.remove('playing');
-                    }
-                }
-                
-                // Starte neuen Track - entferne führende '/' für Flask-Routing
-                let cleanPath = filepath.startsWith('/') ? filepath.substring(1) : filepath;
-                audioPlayer.src = `/audio/${encodeURIComponent(cleanPath)}`;
-                
-                audioPlayer.play().then(() => {
-                    button.textContent = "⏸";
-                    button.classList.add('playing');
-                    currentAudio = audioPlayer;
-                    currentPlayButton = button;
-                }).catch(error => {
-                    console.error('Fehler beim Abspielen:', error);
-                    alert('Fehler beim Abspielen der Datei: ' + error.message);
-                });
+                return;
             }
             
-            // Event-Listener für Ende des Tracks
-            audioPlayer.addEventListener('ended', function() {
+            // Anderen Track stoppen falls vorhanden
+            if (currentAudio) {
+                currentAudio.pause();
                 if (currentPlayButton) {
-                    currentPlayButton.textContent = "▶";
-                    currentPlayButton.classList.remove('playing');
+                    resetPlayButton(currentPlayButton);
                 }
-                currentAudio = null;
-                currentPlayButton = null;
+            }
+            
+            // Neuen Track starten
+            const cleanPath = filepath.startsWith('/') ? filepath.substring(1) : filepath;
+            audioPlayer.src = `/audio/${encodeURIComponent(cleanPath)}`;
+            
+            audioPlayer.play().then(() => {
+                setPlayingButton(button);
+                currentAudio = audioPlayer;
+                currentPlayButton = button;
+            }).catch(error => {
+                console.error('Fehler beim Abspielen:', error);
+                alert('Fehler beim Abspielen der Datei: ' + error.message);
             });
+            
+            // Event-Listener für Track-Ende (nur einmal hinzufügen)
+            audioPlayer.removeEventListener('ended', handleTrackEnd);
+            audioPlayer.addEventListener('ended', handleTrackEnd);
         }
 
-        // Tooltip-Funktionalität initialisieren
+        function handleTrackEnd() {
+            if (currentPlayButton) {
+                resetPlayButton(currentPlayButton);
+            }
+            currentAudio = null;
+            currentPlayButton = null;
+        }
+
+        function setPlayingButton(button) {
+            button.textContent = "⏸";
+            button.classList.add('playing');
+        }
+
+        function resetPlayButton(button) {
+            button.textContent = "▶";
+            button.classList.remove('playing');
+        }
+
+        /* === TOOLTIP SYSTEM ===
+         * Hover-Tooltips mit detaillierten MP3-Informationen
+         */
         function initializeTooltips() {
-            // Tooltip-Element erstellen
+            // Tooltip-Element einmal erstellen
             tooltipElement = document.createElement('div');
             tooltipElement.className = 'mp3-tooltip';
             document.body.appendChild(tooltipElement);
@@ -301,30 +349,21 @@
                 const row = filenameElement.closest('.mp3-row');
                 const filepath = row.dataset.filepath;
 
-                filenameElement.addEventListener('mouseenter', function(e) {
-                    showTooltip(e, filepath);
-                });
-
-                filenameElement.addEventListener('mouseleave', function() {
-                    hideTooltip();
-                });
-
-                filenameElement.addEventListener('mousemove', function(e) {
-                    updateTooltipPosition(e);
-                });
+                filenameElement.addEventListener('mouseenter', e => showTooltip(e, filepath));
+                filenameElement.addEventListener('mouseleave', hideTooltip);
+                filenameElement.addEventListener('mousemove', updateTooltipPosition);
             });
         }
 
-        // Tooltip anzeigen
         function showTooltip(event, filepath) {
             clearTimeout(tooltipTimeout);
             
-            // Sofort Lade-Anzeige zeigen
+            // Sofort Lade-Animation anzeigen
             tooltipElement.innerHTML = '<div class="tooltip-loading">Lade MP3-Informationen</div>';
             tooltipElement.classList.add('show');
             updateTooltipPosition(event);
 
-            // MP3-Informationen abrufen
+            // MP3-Informationen via API laden
             const encodedPath = encodeURIComponent(filepath);
             fetch(`/api/mp3-info?filepath=${encodedPath}`)
                 .then(response => response.json())
@@ -340,21 +379,19 @@
                 });
         }
 
-        // Tooltip verstecken
         function hideTooltip() {
             tooltipTimeout = setTimeout(() => {
                 tooltipElement.classList.remove('show');
             }, 100);
         }
 
-        // Tooltip-Position aktualisieren
         function updateTooltipPosition(event) {
             const tooltip = tooltipElement;
             const margin = 10;
             let x = event.pageX + margin;
             let y = event.pageY + margin;
 
-            // Verhindere, dass Tooltip über Bildschirmrand hinausgeht
+            // Bildschirm-Grenzen respektieren
             const tooltipRect = tooltip.getBoundingClientRect();
             const windowWidth = window.innerWidth;
             const windowHeight = window.innerHeight;
@@ -371,113 +408,213 @@
             tooltip.style.top = y + 'px';
         }
 
-        // Tooltip-Inhalt rendern
+        /* === TOOLTIP CONTENT RENDERING === */
         function renderTooltipContent(data) {
             if (data.error) {
                 tooltipElement.innerHTML = `<div class="tooltip-error">${data.error}</div>`;
                 return;
             }
 
+            const sections = {
+                technical: { icon: '📄', title: 'Datei-Info', data: data.technical },
+                basic: { icon: '🎵', title: 'ID3-Tags', data: data.basic },
+                extended: { icon: '➕', title: 'Erweiterte Tags', data: data.extended }
+            };
+
             let leftColumnHtml = '';
             let rightColumnHtml = '';
 
-            // Technische Informationen - Links
-            if (data.technical && Object.keys(data.technical).length > 0) {
-                leftColumnHtml += '<div class="tooltip-section">';
-                leftColumnHtml += '<div class="tooltip-header">📄 Datei-Info</div>';
-                leftColumnHtml += '<div class="tooltip-content">';
-                
-                Object.entries(data.technical).forEach(([key, value]) => {
-                    const labels = {
-                        'file_path': 'Datei',
-                        'file_size': 'Größe', 
-                        'duration': 'Dauer',
-                        'bitrate': 'Bitrate',
-                        'sample_rate': 'Sample Rate',
-                        'channels': 'Kanäle'
-                    };
-                    leftColumnHtml += `<div class="tooltip-label">${labels[key] || key}:</div>`;
-                    leftColumnHtml += `<div class="tooltip-value">${value}</div>`;
-                });
-                
-                leftColumnHtml += '</div></div>';
-            }
+            // Linke Spalte: Technische und Tag-Informationen
+            Object.entries(sections).forEach(([key, section]) => {
+                if (section.data && Object.keys(section.data).length > 0) {
+                    leftColumnHtml += buildSection(section.icon, section.title, section.data);
+                }
+            });
 
-            // Basis-Tags - Links
-            if (data.basic && Object.keys(data.basic).length > 0) {
-                leftColumnHtml += '<div class="tooltip-section">';
-                leftColumnHtml += '<div class="tooltip-header">🎵 ID3-Tags</div>';
-                leftColumnHtml += '<div class="tooltip-content">';
-                
-                Object.entries(data.basic).forEach(([key, value]) => {
-                    leftColumnHtml += `<div class="tooltip-label">${key}:</div>`;
-                    leftColumnHtml += `<div class="tooltip-value">${value}</div>`;
-                });
-                
-                leftColumnHtml += '</div></div>';
-            }
-
-            // Erweiterte Tags - Links
-            if (data.extended && Object.keys(data.extended).length > 0) {
-                leftColumnHtml += '<div class="tooltip-section">';
-                leftColumnHtml += '<div class="tooltip-header">➕ Erweiterte Tags</div>';
-                leftColumnHtml += '<div class="tooltip-content">';
-                
-                Object.entries(data.extended).forEach(([key, value]) => {
-                    leftColumnHtml += `<div class="tooltip-label">${key}:</div>`;
-                    leftColumnHtml += `<div class="tooltip-value">${value}</div>`;
-                });
-                
-                leftColumnHtml += '</div></div>';
-            }
-
-            // Cover-Informationen - Rechts
+            // Rechte Spalte: Cover-Informationen
             if (data.cover) {
-                rightColumnHtml += '<div class="tooltip-section">';
-                rightColumnHtml += '<div class="tooltip-header">🖼️ Cover</div>';
-                
-                if (data.cover.error) {
-                    rightColumnHtml += `<div class="tooltip-error">${data.cover.error}</div>`;
-                } else {
-                    // Cover-Vorschau zuerst
-                    if (data.cover.data) {
-                        rightColumnHtml += '<div class="tooltip-cover">';
-                        rightColumnHtml += `<img src="data:image/jpeg;base64,${data.cover.data}" alt="Cover Preview">`;
-                        rightColumnHtml += '</div>';
-                    }
-                    
-                    // Cover-Details
-                    rightColumnHtml += '<div class="tooltip-content">';
-                    rightColumnHtml += `<div class="tooltip-label">Auflösung:</div>`;
-                    rightColumnHtml += `<div class="tooltip-value">${data.cover.width}×${data.cover.height}</div>`;
-                    rightColumnHtml += `<div class="tooltip-label">Größe:</div>`;
-                    rightColumnHtml += `<div class="tooltip-value">${data.cover.size}</div>`;
-                    rightColumnHtml += `<div class="tooltip-label">Format:</div>`;
-                    rightColumnHtml += `<div class="tooltip-value">${data.cover.format}</div>`;
-                    rightColumnHtml += '</div>';
+                rightColumnHtml = buildCoverSection(data.cover);
+            }
+
+            // HTML zusammenbauen
+            let html = '<div class="tooltip-main-container">';
+            if (leftColumnHtml) html += `<div class="tooltip-left-column">${leftColumnHtml}</div>`;
+            if (rightColumnHtml) html += `<div class="tooltip-right-column">${rightColumnHtml}</div>`;
+            html += '</div>';
+
+            tooltipElement.innerHTML = html || '<div class="tooltip-error">Keine Informationen verfügbar</div>';
+        }
+
+        function buildSection(icon, title, data) {
+            let html = '<div class="tooltip-section">';
+            html += `<div class="tooltip-header">${icon} ${title}</div>`;
+            html += '<div class="tooltip-content">';
+            
+            Object.entries(data).forEach(([key, value]) => {
+                const labels = {
+                    'file_path': 'Datei', 'file_size': 'Größe', 'duration': 'Dauer',
+                    'bitrate': 'Bitrate', 'sample_rate': 'Sample Rate', 'channels': 'Kanäle'
+                };
+                html += `<div class="tooltip-label">${labels[key] || key}:</div>`;
+                html += `<div class="tooltip-value">${value}</div>`;
+            });
+            
+            html += '</div></div>';
+            return html;
+        }
+
+        function buildCoverSection(cover) {
+            let html = '<div class="tooltip-section">';
+            html += '<div class="tooltip-header">🖼️ Cover</div>';
+            
+            if (cover.error) {
+                html += `<div class="tooltip-error">${cover.error}</div>`;
+            } else {
+                if (cover.data) {
+                    html += '<div class="tooltip-cover">';
+                    html += `<img src="data:image/jpeg;base64,${cover.data}" alt="Cover Preview">`;
+                    html += '</div>';
                 }
                 
-                rightColumnHtml += '</div>';
-            }
-
-            // Struktur zusammenbauen
-            let html = '<div class="tooltip-main-container">';
-            
-            if (leftColumnHtml) {
-                html += `<div class="tooltip-left-column">${leftColumnHtml}</div>`;
-            }
-            
-            if (rightColumnHtml) {
-                html += `<div class="tooltip-right-column">${rightColumnHtml}</div>`;
+                html += '<div class="tooltip-content">';
+                html += `<div class="tooltip-label">Auflösung:</div><div class="tooltip-value">${cover.width}×${cover.height}</div>`;
+                html += `<div class="tooltip-label">Größe:</div><div class="tooltip-value">${cover.size}</div>`;
+                html += `<div class="tooltip-label">Format:</div><div class="tooltip-value">${cover.format}</div>`;
+                html += '</div>';
             }
             
             html += '</div>';
+            return html;
+        }
 
-            if (!leftColumnHtml && !rightColumnHtml) {
-                html = '<div class="tooltip-error">Keine Informationen verfügbar</div>';
+        /* === TAG-SPEICHER-SYSTEM ===
+         * Batch-Speichern mit Progress-Bar und automatischer Bestätigung
+         */
+        function initializeSaveFunction() {
+            const saveBtn = document.getElementById('batchSaveBtn');
+            if (saveBtn) {
+                saveBtn.addEventListener('click', saveTags);
+            }
+        }
+
+        function saveTags() {
+            const filesToSave = collectFilesToSave();
+            
+            if (filesToSave.length === 0) {
+                alert('Keine Dateien zum Speichern ausgewählt.');
+                return;
             }
 
-            tooltipElement.innerHTML = html;
+            // Progress-System starten
+            const progressController = createProgressController();
+            progressController.show();
+            progressController.updateProgress(25, `Übertrage ${filesToSave.length} Dateien...`);
+
+            // API-Request ausführen
+            performSaveRequest(filesToSave, progressController);
+        }
+
+        function collectFilesToSave() {
+            const filesToSave = [];
+            
+            selectedFiles.forEach(filepath => {
+                const row = document.querySelector(`[data-filepath="${filepath}"]`);
+                if (row) {
+                    const tags = {
+                        title: row.querySelector('.title-input')?.value || '',
+                        artist: row.querySelector('.artist-input')?.value || '',
+                        album: row.querySelector('.album-input')?.value || '',
+                        year: row.querySelector('.year-input')?.value || '',
+                        track: row.querySelector('.track-input')?.value || '',
+                        genre: row.querySelector('.genre-input')?.value || ''
+                    };
+                    
+                    filesToSave.push({ filepath, tags });
+                }
+            });
+            
+            return filesToSave;
+        }
+
+        function createProgressController() {
+            const saveBtn = document.getElementById('batchSaveBtn');
+            const overlay = document.getElementById('saveProgressOverlay');
+            const progressFill = document.getElementById('saveProgressFill');
+            const progressText = document.getElementById('saveProgressText');
+            const progressStatus = document.getElementById('saveProgressStatus');
+            
+            return {
+                show: () => {
+                    saveBtn.disabled = true;
+                    overlay.classList.add('show');
+                    progressFill.style.width = '0%';
+                    progressText.textContent = 'Sammle Datei-Informationen...';
+                    progressStatus.textContent = '';
+                },
+                
+                updateProgress: (percent, text, status = '') => {
+                    progressFill.style.width = `${percent}%`;
+                    progressText.textContent = text;
+                    if (status) progressStatus.textContent = status;
+                },
+                
+                hide: () => {
+                    overlay.classList.remove('show');
+                    saveBtn.disabled = false;
+                    // Status-Farbe zurücksetzen
+                    setTimeout(() => {
+                        progressStatus.style.color = '#27ae60';
+                    }, 300);
+                }
+            };
+        }
+
+        function performSaveRequest(filesToSave, progressController) {
+            fetch('/api/save-tags', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ files: filesToSave })
+            })
+            .then(response => {
+                progressController.updateProgress(75, 'Verarbeite Antwort...');
+                return response.json();
+            })
+            .then(data => handleSaveResponse(data, progressController))
+            .catch(error => handleSaveError(error, progressController));
+        }
+
+        function handleSaveResponse(data, progressController) {
+            progressController.updateProgress(100, '');
+            
+            if (data.success) {
+                progressController.updateProgress(100, '', `✅ ${data.summary.success} Dateien erfolgreich gespeichert!`);
+                resetFileSelection();
+            } else {
+                const status = `⚠️ ${data.summary.success} erfolgreich, ${data.summary.errors} Fehler`;
+                progressController.updateProgress(100, '', status);
+                document.getElementById('saveProgressStatus').style.color = '#e67e22';
+            }
+            
+            // Nach 2 Sekunden automatisch ausblenden
+            setTimeout(() => progressController.hide(), 2000);
+        }
+
+        function handleSaveError(error, progressController) {
+            console.error('Fehler beim Speichern:', error);
+            progressController.updateProgress(100, '', '❌ Fehler beim Speichern der Tags');
+            document.getElementById('saveProgressStatus').style.color = '#e74c3c';
+            
+            setTimeout(() => progressController.hide(), 3000);
+        }
+
+        function resetFileSelection() {
+            selectedFiles.clear();
+            document.querySelectorAll('.file-checkbox:checked').forEach(cb => {
+                cb.checked = false;
+            });
+            updateGlobalSelect();
+            updateDirectorySelects();
+            updateBatchButton();
         }
     </script>
 </body>

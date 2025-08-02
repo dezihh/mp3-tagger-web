@@ -1,33 +1,29 @@
 # MP3 Tagger Web Application
 
-Eine webbasierte Anwendung zur Verwaltung und Bearbeitung von MP3-Metadaten mit erweiterten Erkennungsfunktionen, basisierend auf python3.Wird mit einer venv betrieben.
+Eine moderne, webbasierte Anwendung zur Verwaltung und Bearbeitung von MP3-Metadaten mit erweiterten Features wie Hover-Tooltips, Batch-Bearbeitung und automatischen Checkbox-Aktivierung.
 
-## 🎯 Funktionsbeschreibung (System Design)
+## ✨ Haupt-Features
 
-### 📋 Vierstufiger Workflow
+- **🔍 Hover-Tooltips**: Detaillierte MP3-Informationen bei Dateiname-Hover
+- **📝 Batch-Bearbeitung**: Mehrere Dateien gleichzeitig bearbeiten
+- **✅ Smart Checkboxes**: Automatische Aktivierung bei Feldänderungen
+- **📊 Progress-Bar**: Visuelles Feedback beim Speichern ohne störende Dialoge
+- **🎵 Audio-Preview**: Integrierte MP3-Wiedergabe
+- **🖼️ Cover-Anzeige**: Pixelauflösung und Thumbnail-Vorschau
+- **📱 Responsive Design**: Optimiert für verschiedene Bildschirmgrößen
 
-#### **Stufe 1: Grunddaten-Erfassung (automatisch)**
-**Verzeichnis-Auswahl:**
-- Quellverzeichnis manuell eingeben oder per Explorer auswählen
-- Automatisches Scannen aller MP3-Dateien im Verzeichnis
-- Ergebnisse werden verzeichnisweise sortiert in Stufe 2 angezeigt
+## 🏗️ Code-Architektur (Optimiert)
 
-#### **Stufe 2: Grunddaten-Erfassung (automatisch)**
-Beim Laden eines Verzeichnisses werden **automatisch** alle verfügbaren Informationen gesammelt:
+### Frontend (HTML/CSS/JavaScript)
+- **`templates/results.html`**: Optimiertes Template mit modularem JavaScript
+- **`static/styles_optimized.css`**: Bereinigte CSS-Datei ohne Redundanzen
+- **Modulare JavaScript-Struktur**: Getrennte Funktionsbereiche für Wartbarkeit
 
-1. **ID3-Tags auslesen**: Vorhandene Metadaten (Artist, Titel, Album, Track, Genre)
-2. **Cover-Status ermitteln**: Internes Cover, externes Cover im Verzeichnis  
-3. **Dateiname-Parsing**: Falls keine ID3-Tags vorhanden → Automatische Erkennung aus Dateinamen
-   - **Artist/Titel-Muster**: `"Artist - Title.mp3"`, `"Track Artist - Title.mp3"`
-   - **Track-Nummern-Muster**: `"01 - Title.mp3"`, `"001 Track.mp3"`, `"05. Song.mp3"`
-   - **Kombinierte Muster**: `"Artist - 02 - Title.mp3"`, `"Album/03-Song.mp3"`
-   - **Visuelle Kennzeichnung**: Beige Hintergrund für erkannte Daten
-   - **Track-Formatierung**: Automatische Anpassung an konfigurierte Stellenzahl (mit führender 0)
-
-#### **Stufe 3: Audio-Erkennung (auf Knopfdruck)**
-Für Dateien ohne ausreichende Metadaten → **Audio-Fingerprinting**:
-
-1. **Shazam-Erkennung** (Primär): Beste Ergebnisse mit Cover-URLs und Streaming-Links
+### Backend (Python/Flask)
+- **`app.py`**: Flask-Anwendung mit API-Endpoints
+- **`tagger/utils.py`**: Optimierte Utility-Funktionen mit verbesserter Struktur
+- **`tagger/mp3_processor.py`**: MP3-Verarbeitung und Metadaten-Extraktion
+- **`tagger/directory_history.py`**: Verzeichnis-Verlauf Management
 2. **AcoustID-Erkennung** (Fallback): MusicBrainz-basierte Metadaten
 3. **Intelligente Segmentierung**: Verschiedene Audio-Abschnitte für bessere Trefferquote
 

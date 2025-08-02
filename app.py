@@ -10,7 +10,7 @@ import os
 import urllib.parse
 from tagger.directory_history import get_directory_history
 from tagger.mp3_processor import scan_mp3_directory, get_mp3_statistics
-from tagger.utils import has_mp3_files, count_mp3_files_in_directory, is_mp3_file, get_detailed_mp3_info
+from tagger.utils import has_mp3_files, count_mp3_files_in_directory, is_mp3_file, get_detailed_mp3_info, save_mp3_tags
 
 app = Flask(__name__)
 
@@ -151,7 +151,61 @@ def api_mp3_info():
         return jsonify(info)
         
     except Exception as e:
-        return jsonify({'error': f'Fehler beim Lesen der Datei: {str(e)}'}), 500
+        return jsonify({'error': f'Fehler beim Laden der MP3-Informationen: {str(e)}'})
+
+
+@app.route('/api/save-tags', methods=['POST'])
+def save_tags():
+    """API-Endpoint zum Speichern der ID3-Tags in ausgewählte MP3-Dateien"""
+    try:
+        data = request.get_json()
+        
+        if not data or 'files' not in data:
+            return jsonify({'success': False, 'message': 'Keine Dateidaten erhalten'})
+        
+        files_data = data['files']
+        results = []
+        success_count = 0
+        error_count = 0
+        
+        for file_data in files_data:
+            file_path = file_data.get('filepath')
+            tags_data = file_data.get('tags', {})
+            
+            if not file_path:
+                results.append({
+                    'file': 'Unbekannt',
+                    'success': False,
+                    'message': 'Kein Dateipfad angegeben'
+                })
+                error_count += 1
+                continue
+            
+            # Tags speichern
+            result = save_mp3_tags(file_path, tags_data)
+            results.append(result)
+            
+            if result['success']:
+                success_count += 1
+            else:
+                error_count += 1
+        
+        return jsonify({
+            'success': error_count == 0,
+            'message': f'{success_count} Dateien erfolgreich gespeichert, {error_count} Fehler',
+            'results': results,
+            'summary': {
+                'total': len(files_data),
+                'success': success_count,
+                'errors': error_count
+            }
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'Fehler beim Speichern der Tags: {str(e)}'
+        })
 
 
 if __name__ == '__main__':
