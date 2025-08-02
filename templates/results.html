@@ -78,7 +78,7 @@
                                 </button>
                             </td>
                             <td class="col-filename" title="{{ file.filename }}">
-                                <span class="filename">{{ file.filename }}</span>
+                                <span class="filename hover-target">{{ file.filename }}</span>
                                 <span class="file-size">({{ "%.1f"|format(file.size / 1024 / 1024) }} MB)</span>
                             </td>
                             <td class="col-track">
@@ -120,11 +120,14 @@
         let selectedFiles = new Set();
         let currentAudio = null;
         let currentPlayButton = null;
+        let tooltipElement = null;
+        let tooltipTimeout = null;
 
         // DOM Ready
         document.addEventListener('DOMContentLoaded', function() {
             initializeControls();
             initializePlayback();
+            initializeTooltips();
             updateBatchButton();
         });
 
@@ -283,6 +286,198 @@
                 currentAudio = null;
                 currentPlayButton = null;
             });
+        }
+
+        // Tooltip-Funktionalität initialisieren
+        function initializeTooltips() {
+            // Tooltip-Element erstellen
+            tooltipElement = document.createElement('div');
+            tooltipElement.className = 'mp3-tooltip';
+            document.body.appendChild(tooltipElement);
+
+            // Event-Listener für alle Dateinamen
+            const filenames = document.querySelectorAll('.filename');
+            filenames.forEach(filenameElement => {
+                const row = filenameElement.closest('.mp3-row');
+                const filepath = row.dataset.filepath;
+
+                filenameElement.addEventListener('mouseenter', function(e) {
+                    showTooltip(e, filepath);
+                });
+
+                filenameElement.addEventListener('mouseleave', function() {
+                    hideTooltip();
+                });
+
+                filenameElement.addEventListener('mousemove', function(e) {
+                    updateTooltipPosition(e);
+                });
+            });
+        }
+
+        // Tooltip anzeigen
+        function showTooltip(event, filepath) {
+            clearTimeout(tooltipTimeout);
+            
+            // Sofort Lade-Anzeige zeigen
+            tooltipElement.innerHTML = '<div class="tooltip-loading">Lade MP3-Informationen</div>';
+            tooltipElement.classList.add('show');
+            updateTooltipPosition(event);
+
+            // MP3-Informationen abrufen
+            const encodedPath = encodeURIComponent(filepath);
+            fetch(`/api/mp3-info?filepath=${encodedPath}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (tooltipElement.classList.contains('show')) {
+                        renderTooltipContent(data);
+                    }
+                })
+                .catch(error => {
+                    if (tooltipElement.classList.contains('show')) {
+                        tooltipElement.innerHTML = '<div class="tooltip-error">Fehler beim Laden der Informationen</div>';
+                    }
+                });
+        }
+
+        // Tooltip verstecken
+        function hideTooltip() {
+            tooltipTimeout = setTimeout(() => {
+                tooltipElement.classList.remove('show');
+            }, 100);
+        }
+
+        // Tooltip-Position aktualisieren
+        function updateTooltipPosition(event) {
+            const tooltip = tooltipElement;
+            const margin = 10;
+            let x = event.pageX + margin;
+            let y = event.pageY + margin;
+
+            // Verhindere, dass Tooltip über Bildschirmrand hinausgeht
+            const tooltipRect = tooltip.getBoundingClientRect();
+            const windowWidth = window.innerWidth;
+            const windowHeight = window.innerHeight;
+
+            if (x + tooltipRect.width > windowWidth) {
+                x = event.pageX - tooltipRect.width - margin;
+            }
+
+            if (y + tooltipRect.height > windowHeight) {
+                y = event.pageY - tooltipRect.height - margin;
+            }
+
+            tooltip.style.left = x + 'px';
+            tooltip.style.top = y + 'px';
+        }
+
+        // Tooltip-Inhalt rendern
+        function renderTooltipContent(data) {
+            if (data.error) {
+                tooltipElement.innerHTML = `<div class="tooltip-error">${data.error}</div>`;
+                return;
+            }
+
+            let leftColumnHtml = '';
+            let rightColumnHtml = '';
+
+            // Technische Informationen - Links
+            if (data.technical && Object.keys(data.technical).length > 0) {
+                leftColumnHtml += '<div class="tooltip-section">';
+                leftColumnHtml += '<div class="tooltip-header">📄 Datei-Info</div>';
+                leftColumnHtml += '<div class="tooltip-content">';
+                
+                Object.entries(data.technical).forEach(([key, value]) => {
+                    const labels = {
+                        'file_path': 'Datei',
+                        'file_size': 'Größe', 
+                        'duration': 'Dauer',
+                        'bitrate': 'Bitrate',
+                        'sample_rate': 'Sample Rate',
+                        'channels': 'Kanäle'
+                    };
+                    leftColumnHtml += `<div class="tooltip-label">${labels[key] || key}:</div>`;
+                    leftColumnHtml += `<div class="tooltip-value">${value}</div>`;
+                });
+                
+                leftColumnHtml += '</div></div>';
+            }
+
+            // Basis-Tags - Links
+            if (data.basic && Object.keys(data.basic).length > 0) {
+                leftColumnHtml += '<div class="tooltip-section">';
+                leftColumnHtml += '<div class="tooltip-header">🎵 ID3-Tags</div>';
+                leftColumnHtml += '<div class="tooltip-content">';
+                
+                Object.entries(data.basic).forEach(([key, value]) => {
+                    leftColumnHtml += `<div class="tooltip-label">${key}:</div>`;
+                    leftColumnHtml += `<div class="tooltip-value">${value}</div>`;
+                });
+                
+                leftColumnHtml += '</div></div>';
+            }
+
+            // Erweiterte Tags - Links
+            if (data.extended && Object.keys(data.extended).length > 0) {
+                leftColumnHtml += '<div class="tooltip-section">';
+                leftColumnHtml += '<div class="tooltip-header">➕ Erweiterte Tags</div>';
+                leftColumnHtml += '<div class="tooltip-content">';
+                
+                Object.entries(data.extended).forEach(([key, value]) => {
+                    leftColumnHtml += `<div class="tooltip-label">${key}:</div>`;
+                    leftColumnHtml += `<div class="tooltip-value">${value}</div>`;
+                });
+                
+                leftColumnHtml += '</div></div>';
+            }
+
+            // Cover-Informationen - Rechts
+            if (data.cover) {
+                rightColumnHtml += '<div class="tooltip-section">';
+                rightColumnHtml += '<div class="tooltip-header">🖼️ Cover</div>';
+                
+                if (data.cover.error) {
+                    rightColumnHtml += `<div class="tooltip-error">${data.cover.error}</div>`;
+                } else {
+                    // Cover-Vorschau zuerst
+                    if (data.cover.data) {
+                        rightColumnHtml += '<div class="tooltip-cover">';
+                        rightColumnHtml += `<img src="data:image/jpeg;base64,${data.cover.data}" alt="Cover Preview">`;
+                        rightColumnHtml += '</div>';
+                    }
+                    
+                    // Cover-Details
+                    rightColumnHtml += '<div class="tooltip-content">';
+                    rightColumnHtml += `<div class="tooltip-label">Auflösung:</div>`;
+                    rightColumnHtml += `<div class="tooltip-value">${data.cover.width}×${data.cover.height}</div>`;
+                    rightColumnHtml += `<div class="tooltip-label">Größe:</div>`;
+                    rightColumnHtml += `<div class="tooltip-value">${data.cover.size}</div>`;
+                    rightColumnHtml += `<div class="tooltip-label">Format:</div>`;
+                    rightColumnHtml += `<div class="tooltip-value">${data.cover.format}</div>`;
+                    rightColumnHtml += '</div>';
+                }
+                
+                rightColumnHtml += '</div>';
+            }
+
+            // Struktur zusammenbauen
+            let html = '<div class="tooltip-main-container">';
+            
+            if (leftColumnHtml) {
+                html += `<div class="tooltip-left-column">${leftColumnHtml}</div>`;
+            }
+            
+            if (rightColumnHtml) {
+                html += `<div class="tooltip-right-column">${rightColumnHtml}</div>`;
+            }
+            
+            html += '</div>';
+
+            if (!leftColumnHtml && !rightColumnHtml) {
+                html = '<div class="tooltip-error">Keine Informationen verfügbar</div>';
+            }
+
+            tooltipElement.innerHTML = html;
         }
     </script>
 </body>

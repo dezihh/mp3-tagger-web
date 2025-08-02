@@ -5,12 +5,12 @@ Haupteinstiegspunkt der Webanwendung mit Historie-Funktionalität für
 zuletzt verwendete Verzeichnisse und modularer MP3-Verzeichnis-Verarbeitung.
 """
 
-from flask import Flask, render_template, request, redirect, url_for, send_file, abort
+from flask import Flask, render_template, request, redirect, url_for, send_file, abort, jsonify
 import os
 import urllib.parse
 from tagger.directory_history import get_directory_history
 from tagger.mp3_processor import scan_mp3_directory, get_mp3_statistics
-from tagger.utils import has_mp3_files, count_mp3_files_in_directory, is_mp3_file
+from tagger.utils import has_mp3_files, count_mp3_files_in_directory, is_mp3_file, get_detailed_mp3_info
 
 app = Flask(__name__)
 
@@ -119,6 +119,40 @@ def serve_audio(filepath):
         
     except Exception:
         abort(404)
+
+
+@app.route('/api/mp3-info')
+def api_mp3_info():
+    """
+    API-Endpoint für detaillierte MP3-Informationen (für Hover-Tooltip).
+    
+    Query Parameter:
+        filepath: Pfad zur MP3-Datei
+        
+    Returns:
+        JSON mit allen ID3-Tags und Cover-Informationen
+    """
+    filepath = request.args.get('filepath', '')
+    
+    if not filepath:
+        return jsonify({'error': 'Kein Dateipfad angegeben'}), 400
+    
+    try:
+        # Dekodiere URL-encoded Pfad
+        decoded_path = urllib.parse.unquote(filepath)
+        
+        # Sicherheitscheck
+        if not os.path.isfile(decoded_path) or not is_mp3_file(decoded_path):
+            return jsonify({'error': 'Datei nicht gefunden oder keine MP3'}), 404
+        
+        # Detaillierte Informationen sammeln
+        info = get_detailed_mp3_info(decoded_path)
+        
+        return jsonify(info)
+        
+    except Exception as e:
+        return jsonify({'error': f'Fehler beim Lesen der Datei: {str(e)}'}), 500
+
 
 if __name__ == '__main__':
     app.run(debug=True)

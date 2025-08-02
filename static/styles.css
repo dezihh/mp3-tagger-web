@@ -446,7 +446,219 @@ button:hover {
     color: #721c24;
 }
 
-/* === RESPONSIVE DESIGN === */
+/* === HOVER TOOLTIP === */
+.mp3-tooltip {
+    position: absolute;
+    background: #ffffff;
+    border: 1px solid #bdc3c7;
+    border-radius: 8px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+    padding: 16px;
+    max-width: 600px;
+    min-width: 500px;
+    z-index: 10000;
+    font-size: 0.8rem;
+    line-height: 1.4;
+    color: #2c3e50;
+    opacity: 0;
+    transform: translateY(-10px);
+    transition: opacity 0.3s ease, transform 0.3s ease;
+    pointer-events: none;
+}
+
+.mp3-tooltip.show {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+/* Hauptcontainer - zweispaltig */
+.tooltip-main-container {
+    display: flex;
+    gap: 20px;
+    align-items: flex-start;
+}
+
+.tooltip-left-column {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.tooltip-right-column {
+    flex: 0 0 160px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+}
+
+/* Sektionen */
+.tooltip-section {
+    margin-bottom: 0;
+}
+
+.tooltip-header {
+    font-weight: 700;
+    color: #2c3e50;
+    margin-bottom: 8px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid #ecf0f1;
+    font-size: 0.85rem;
+}
+
+.tooltip-content {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 6px 16px;
+    align-items: baseline;
+}
+
+.tooltip-label {
+    color: #7f8c8d;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.tooltip-value {
+    color: #2c3e50;
+    font-weight: 400;
+    word-break: break-word;
+}
+
+/* Cover */
+.tooltip-cover {
+    text-align: center;
+    margin-bottom: 8px;
+}
+
+.tooltip-cover img {
+    max-width: 140px;
+    max-height: 140px;
+    border-radius: 6px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+    border: 1px solid #bdc3c7;
+}
+
+/* Status-Anzeigen */
+.tooltip-error {
+    color: #e74c3c;
+    font-style: italic;
+    text-align: center;
+    font-weight: 500;
+}
+
+.tooltip-loading {
+    text-align: center;
+    color: #7f8c8d;
+    font-weight: 400;
+}
+
+@keyframes tooltipFadeIn {
+    from { opacity: 0; transform: translateY(-5px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.tooltip-section {
+    margin-bottom: 8px;
+}
+
+.tooltip-section:last-child {
+    margin-bottom: 0;
+}
+
+.tooltip-header {
+    font-weight: 700;
+    color: #2c3e50;
+    margin-bottom: 6px;
+    padding-bottom: 3px;
+    border-bottom: 1px solid #bdc3c7;
+    font-size: 0.8rem;
+}
+
+.tooltip-content {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 3px 8px;
+    align-items: start;
+}
+
+.tooltip-label {
+    color: #34495e;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.tooltip-value {
+    color: #2c3e50;
+    font-weight: 500;
+    word-break: break-word;
+}
+
+.tooltip-cover {
+    text-align: center;
+    margin-top: 8px;
+}
+
+.tooltip-cover img {
+    max-width: 120px;
+    max-height: 120px;
+    border-radius: 6px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+    border: 1px solid #ddd;
+}
+
+.tooltip-cover-info {
+    margin-top: 4px;
+    font-size: 0.65rem;
+    color: #34495e;
+    text-align: center;
+}
+
+.tooltip-error {
+    color: #e74c3c;
+    font-style: italic;
+    text-align: center;
+    font-weight: 600;
+}
+
+.tooltip-loading {
+    text-align: center;
+    color: #34495e;
+    font-weight: 500;
+}
+
+.tooltip-loading::after {
+    content: '';
+    animation: dots 1.5s steps(5, end) infinite;
+}
+
+@keyframes dots {
+    0%, 20% { content: '.'; }
+    40% { content: '..'; }
+    60% { content: '...'; }
+    80%, 100% { content: ''; }
+}
+
+/* Filename mit Hover-Cursor */
+.filename {
+    display: block;
+    font-weight: 600;
+    color: #2c3e50;
+    word-break: break-word;
+    line-height: 1.2;
+    font-size: 0.8rem;
+    cursor: help;
+    transition: color 0.2s ease;
+}
+
+.filename:hover {
+    color: #3498db;
+    text-decoration: underline;
+    background-color: rgba(52, 152, 219, 0.1);
+    padding: 2px 4px;
+    border-radius: 3px;
+}
 @media (max-width: 1200px) {
     .results-header,
     .controls-bar,
