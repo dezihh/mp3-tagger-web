@@ -7,9 +7,45 @@ und deren ID3-Tags.
 
 import os
 import re
+from io import BytesIO
 from mutagen.mp3 import MP3
+from PIL import Image
 from mutagen.id3 import ID3NoHeaderError
 from typing import Dict, List, Any, Optional
+
+
+def get_image_dimensions_from_data(image_data: bytes) -> tuple:
+    """
+    Ermittelt die Abmessungen eines Bildes aus Binärdaten.
+    
+    Args:
+        image_data: Binärdaten des Bildes
+        
+    Returns:
+        Tuple (width, height) oder (0, 0) bei Fehlern
+    """
+    try:
+        with Image.open(BytesIO(image_data)) as img:
+            return img.size  # (width, height)
+    except Exception:
+        return (0, 0)
+
+
+def get_image_dimensions_from_file(file_path: str) -> tuple:
+    """
+    Ermittelt die Abmessungen einer Bilddatei.
+    
+    Args:
+        file_path: Pfad zur Bilddatei
+        
+    Returns:
+        Tuple (width, height) oder (0, 0) bei Fehlern
+    """
+    try:
+        with Image.open(file_path) as img:
+            return img.size  # (width, height)
+    except Exception:
+        return (0, 0)
 
 
 class MP3FileInfo:
@@ -100,23 +136,23 @@ class MP3FileInfo:
             self.title = filename_no_ext
     
     def _detect_cover(self):
-        """Erkennt Cover-Status der Datei."""
+        """Erkennt Cover-Status der Datei mit Auflösungsangabe."""
         try:
             audio = MP3(self.file_path)
-            has_embedded = False
-            embedded_size = 0
+            embedded_dimensions = None
             
             # Prüfe auf eingebettete Cover
             if hasattr(audio, 'tags') and audio.tags:
                 for key in audio.tags.keys():
                     if key.startswith('APIC'):
-                        has_embedded = True
-                        embedded_size = len(audio.tags[key].data)
+                        image_data = audio.tags[key].data
+                        embedded_dimensions = get_image_dimensions_from_data(image_data)
                         break
             
             # Prüfe auf externe Cover-Dateien
             directory = os.path.dirname(self.file_path)
-            external_covers = []
+            external_cover_path = None
+            external_dimensions = None
             cover_extensions = ['.jpg', '.jpeg', '.png', '.gif', '.bmp']
             cover_names = ['cover', 'folder', 'albumart', 'front']
             
@@ -125,23 +161,28 @@ class MP3FileInfo:
                     file_lower = file.lower()
                     if any(file_lower.endswith(ext) for ext in cover_extensions):
                         if any(name in file_lower for name in cover_names):
-                            external_covers.append(file)
+                            external_cover_path = os.path.join(directory, file)
+                            external_dimensions = get_image_dimensions_from_file(external_cover_path)
+                            break
             except OSError:
                 pass
             
-            # Bestimme Cover-Status
-            if has_embedded and external_covers:
-                self.cover_status = f"B{embedded_size//1024}k"  # Both
+            # Bestimme Cover-Status mit Auflösung
+            has_embedded = embedded_dimensions and embedded_dimensions != (0, 0)
+            has_external = external_dimensions and external_dimensions != (0, 0)
+            
+            if has_embedded and has_external:
+                # Beide Cover vorhanden - zeige eingebettetes Cover
+                width, height = embedded_dimensions
+                self.cover_status = f"B {width}x{height}"  # Both
             elif has_embedded:
-                self.cover_status = f"I{embedded_size//1024}k"  # Internal
-            elif external_covers:
-                # Größe der ersten externen Cover-Datei
-                try:
-                    ext_path = os.path.join(directory, external_covers[0])
-                    ext_size = os.path.getsize(ext_path)
-                    self.cover_status = f"E{ext_size//1024}k"  # External
-                except OSError:
-                    self.cover_status = "E?k"
+                # Nur eingebettetes Cover
+                width, height = embedded_dimensions
+                self.cover_status = f"I {width}x{height}"  # Internal
+            elif has_external:
+                # Nur externes Cover (Verzeichnis)
+                width, height = external_dimensions
+                self.cover_status = f"D {width}x{height}"  # Directory
             else:
                 self.cover_status = "Nein"
                 
