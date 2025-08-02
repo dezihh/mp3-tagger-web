@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MP3 Tagger Web - Ergebnisse</title>
     <link rel="stylesheet" href="/static/styles.css">
-    <link rel="stylesheet" href="/static/css/results.css">
 </head>
 <body>
     <div class="results-header">
@@ -263,7 +262,6 @@
                 // Starte neuen Track - entferne führende '/' für Flask-Routing
                 let cleanPath = filepath.startsWith('/') ? filepath.substring(1) : filepath;
                 audioPlayer.src = `/audio/${encodeURIComponent(cleanPath)}`;
-                console.log('Playing:', audioPlayer.src); // Debug
                 
                 audioPlayer.play().then(() => {
                     button.textContent = "⏸";

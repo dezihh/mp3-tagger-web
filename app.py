@@ -156,14 +156,11 @@ def serve_audio(filepath):
         
         # Sicherheitscheck: Datei muss existieren und .mp3 Endung haben
         if not os.path.isfile(decoded_path) or not decoded_path.lower().endswith('.mp3'):
-            print(f"Audio-Datei nicht gefunden: {decoded_path}")  # Debug
             abort(404)
         
-        print(f"Streaming MP3: {decoded_path}")  # Debug
         return send_file(decoded_path, mimetype='audio/mpeg')
         
-    except Exception as e:
-        print(f"Fehler beim Audio-Streaming: {e}")  # Debug
+    except Exception:
         abort(404)
 
 if __name__ == '__main__':
