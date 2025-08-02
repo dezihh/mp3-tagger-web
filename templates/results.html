@@ -1,96 +1,37 @@
 <!DOCTYPE html>
-<html>
+<html lang="de">
 <head>
-    <title>Ergebnisse - MP3 Tagger</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MP3 Tagger Web - Ergebnisse</title>
+    <link rel="stylesheet" href="/static/styles.css">
 </head>
 <body>
-    <div class="container">
-        <h1>Ergebnisse für: {{ directory }}</h1>
-        
-        {% for dir_path, files in results.items() %}
-        <div class="directory-group">
-            <div class="directory-header">
-                <h2>{{ dir_path }}</h2>
-                <label class="directory-checkbox">
-                    <input type="checkbox" class="dir-checkbox" data-dir="{{ dir_path }}">
-                    Alle markieren
-                </label>
-            </div>
-            
-            <table>
-                <thead>
-                    <tr>
-                        <th>Dateiname</th>
-                        <th>Aktuelle ID3 Tags</th>
-                        <th>Vorgeschlagene Tags</th>
-                        <th>Zieldatei</th>
-                        <th class="compact">Aktion</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for file in files %}
-                    <tr>
-                        <!-- Dateiname -->
-                        <td class="filename">{{ file.filename }}</td>
-                        
-                        <!-- Aktuelle Tags -->
-                        <td class="tag-cell">
-                            <div class="tag-display">
-                                <div><span class="tag-label">Artist:</span> {{ file.current_artist or '-' }}</div>
-                                <div><span class="tag-label">Title:</span> {{ file.current_title or '-' }}</div>
-                                <div><span class="tag-label">Album:</span> {{ file.current_album or '-' }}</div>
-                                <div><span class="tag-label">Bild:</span> {{ 'Ja' if file.current_has_cover else 'Nein' }}</div>
-                            </div>
-                            <div class="tag-tooltip">
-                                <h4>Vollständige Metadaten</h4>
-                                <pre>{{ file.current_full_tags }}</pre>
-                                {% if file.current_has_cover %}
-                                <img src="data:image/jpeg;base64,{{ file.current_cover_preview }}" alt="Cover" class="cover-tooltip">
-                                {% endif %}
-                            </div>
-                        </td>
-                        
-                        <!-- Vorgeschlagene Tags -->
-                        <td class="tag-cell">
-                            <div class="tag-display">
-                                <div><span class="tag-label">Artist:</span> {{ file.suggested_artist or '-' }}</div>
-                                <div><span class="tag-label">Title:</span> {{ file.suggested_title or '-' }}</div>
-                                <div><span class="tag-label">Album:</span> {{ file.suggested_album or '-' }}</div>
-                                <div><span class="tag-label">Bild:</span> {{ 'Ja' if file.suggested_cover_url else 'Nein' }}</div>
-                            </div>
-                            <div class="tag-tooltip">
-                                <h4>Vorgeschlagene Metadaten</h4>
-                                <pre>{{ file.suggested_full_tags }}</pre>
-                                {% if file.suggested_cover_url %}
-                                <img src="{{ file.suggested_cover_url }}" alt="Cover" class="cover-tooltip">
-                                {% endif %}
-                            </div>
-                        </td>
-                        
-                        <!-- Zieldatei -->
-                        <td class="target-path">
-                            {{ file.target_path }}
-                        </td>
-                        
-                        <!-- Aktion -->
-                        <td class="action-cell">
-                            <input type="checkbox" class="file-checkbox" 
-                                   data-file="{{ file.path }}"
-                                   {% if file.suggested_artist %}checked{% endif %}>
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+    <h1>MP3 Tagger Web - Ergebnisse</h1>
+    
+    <div class="results-container">
+        <div class="directory-info">
+            <h2>Verzeichnis: {{ mp3_dir }}</h2>
+            <p>{{ mp3_count }} MP3-Dateien gefunden</p>
         </div>
-        {% endfor %}
+        
+        {% if mp3_files %}
+        <div class="files-list">
+            <h3>Gefundene MP3-Dateien:</h3>
+            <ul>
+                {% for file in mp3_files %}
+                <li>
+                    <strong>{{ file.name }}</strong>
+                    <span class="file-size">({{ "%.2f"|format(file.size / 1024 / 1024) }} MB)</span>
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
         
         <div class="actions">
-            <button id="apply-selected">Ausgewählte übernehmen</button>
+            <a href="/" class="back-button">← Zurück zur Verzeichniswahl</a>
         </div>
     </div>
-    
-    <script src="{{ url_for('static', filename='script.js') }}"></script>
 </body>
 </html>

@@ -20,6 +20,7 @@
 ## Developer Workflows
 - Use Python 3 with venv (see README)
 - Install dependencies: `pip install -r requirements.txt`
+- activate venv: `source venv/bin/activate` (Linux/Mac) or `venv\Scripts\activate` (Windows)
 - Run server: `python app.py` (default port 5000)
 - Test modular code in `tagger/` via `examples_modular_usage.py` or `tests/`
 - Manage and save tests in `tests/` (unit tests for `tagger/` logic)
@@ -34,7 +35,7 @@
 - Results pages: `results.html`, 
 
 ## Integration Points
-- External APIs: ShazamIO, AcoustID, MusicBrainz, Last.fm, Discogs (see README for config)
+- External APIs: DiscoGS, hazamIO, AcoustID, MusicBrainz, Last.fm, Discogs (see README for config)
 - All API calls and enrichment logic in `tagger/` modules
 - JS in `static/script.js` for UI interactivity
 
@@ -58,3 +59,4 @@ For unclear conventions or missing patterns, check README.md and existing module
 
 ## General
 Communicate with user in german language, use simple and clear sentences. If you are unsure about a specific implementation detail, ask for clarification or provide a general solution that can be refined later.
+Please ensure to make code reusable and place similar code blocks together. Avoid duplicating logic across modules; instead, create utility functions in `tagger/utils.py` or similar helper files. This will help maintain a clean and modular codebase that is easy to extend and maintain.

@@ -2,18 +2,67 @@
 <html lang="de">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MP3 Tagger Web - Verzeichnis wählen</title>
     <link rel="stylesheet" href="/static/styles.css">
 </head>
 <body>
     <h1>MP3 Tagger Web</h1>
-    <form method="post">
+    
+    <!-- Hauptformular für Verzeichniseingabe -->
+    <form method="post" class="directory-form">
         <label for="mp3_dir">Quellverzeichnis der MP3-Dateien:</label>
-        <input type="text" id="mp3_dir" name="mp3_dir" value="{{ mp3_dir }}" size="50" required>
+        <input type="text" id="mp3_dir" name="mp3_dir" value="{{ mp3_dir }}" 
+               placeholder="z.B. /home/user/Music oder C:\Musik" required>
         <button type="submit">Verzeichnis laden</button>
     </form>
-    {% if error %}
-        <div style="color: red; margin-top: 10px;">{{ error }}</div>
+    
+    <!-- Historie der zuletzt verwendeten Verzeichnisse -->
+    {% if recent_directories %}
+    <div class="history-section">
+        <p class="history-title">Zuletzt verwendet:</p>
+        <ul class="history-links">
+            {% for directory in recent_directories %}
+            <li>
+                <a href="#" class="history-link" data-path="{{ directory.path }}">{{ directory.path }}</a>
+                {% if directory.mp3_count %}<span class="mp3-count">({{ directory.mp3_count }} MP3s)</span>{% endif %}
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
     {% endif %}
+    
+    <!-- Fehlermeldungen -->
+    {% if error %}
+    <div class="error-message">
+        <strong>Fehler:</strong> {{ error }}
+    </div>
+    {% endif %}
+
+    <script>
+        // JavaScript für Historie-Auswahl
+        document.addEventListener('DOMContentLoaded', function() {
+            const historyLinks = document.querySelectorAll('.history-link');
+            const directoryInput = document.getElementById('mp3_dir');
+            const form = document.querySelector('.directory-form');
+            
+            historyLinks.forEach(link => {
+                link.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    const path = this.getAttribute('data-path');
+                    directoryInput.value = path;
+                    
+                    // Visuelles Feedback
+                    this.style.color = '#27ae60';
+                    this.style.fontWeight = 'bold';
+                    
+                    // Automatisch absenden nach kurzer Verzögerung
+                    setTimeout(() => {
+                        form.submit();
+                    }, 200);
+                });
+            });
+        });
+    </script>
 </body>
 </html>
