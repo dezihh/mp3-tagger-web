@@ -5,33 +5,287 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MP3 Tagger Web - Ergebnisse</title>
     <link rel="stylesheet" href="/static/styles.css">
+    <link rel="stylesheet" href="/static/css/results.css">
 </head>
 <body>
-    <h1>MP3 Tagger Web - Ergebnisse</h1>
-    
-    <div class="results-container">
+    <div class="results-header">
+        <h1>MP3 Tagger Web - Ergebnisse</h1>
         <div class="directory-info">
-            <h2>Verzeichnis: {{ mp3_dir }}</h2>
-            <p>{{ mp3_count }} MP3-Dateien gefunden</p>
-        </div>
-        
-        {% if mp3_files %}
-        <div class="files-list">
-            <h3>Gefundene MP3-Dateien:</h3>
-            <ul>
-                {% for file in mp3_files %}
-                <li>
-                    <strong>{{ file.name }}</strong>
-                    <span class="file-size">({{ "%.2f"|format(file.size / 1024 / 1024) }} MB)</span>
-                </li>
-                {% endfor %}
-            </ul>
-        </div>
-        {% endif %}
-        
-        <div class="actions">
-            <a href="/" class="back-button">← Zurück zur Verzeichniswahl</a>
+            <h2>📁 {{ mp3_dir }}</h2>
+            <p>{{ statistics.total_files }} MP3-Dateien in {{ statistics.total_directories }} Verzeichnissen 
+               ({{ "%.1f"|format(statistics.total_size_mb) }} MB)</p>
         </div>
     </div>
+    
+    <div class="controls-bar">
+        <div class="global-controls">
+            <label class="checkbox-container">
+                <input type="checkbox" id="select-all-global">
+                <span class="checkmark"></span>
+                Alle Dateien auswählen/abwählen
+            </label>
+        </div>
+        
+        <div class="action-buttons">
+            <button class="btn btn-primary" id="batch-process" disabled>
+                Ausgewählte verarbeiten (0)
+            </button>
+            <a href="/" class="btn btn-secondary">← Zurück</a>
+        </div>
+    </div>
+
+    <div class="results-container">
+        {% for directory, files in grouped_files.items() %}
+        <div class="directory-group">
+            <div class="directory-header">
+                <h3>📂 {{ directory }}</h3>
+                <div class="directory-controls">
+                    <label class="checkbox-container">
+                        <input type="checkbox" class="select-all-directory" data-directory="{{ directory }}">
+                        <span class="checkmark"></span>
+                        Alle in diesem Ordner ({{ files|length }})
+                    </label>
+                </div>
+            </div>
+            
+            <div class="mp3-table-container">
+                <table class="mp3-table">
+                    <thead>
+                        <tr>
+                            <th class="col-select">Auswahl</th>
+                            <th class="col-play">▶</th>
+                            <th class="col-filename">Dateiname</th>
+                            <th class="col-track">Track#</th>
+                            <th class="col-title">Titel</th>
+                            <th class="col-artist">Artist</th>
+                            <th class="col-album">Album</th>
+                            <th class="col-cover">Cover</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for file in files %}
+                        <tr class="mp3-row" data-directory="{{ directory }}" data-filepath="{{ file.file_path }}">
+                            <td class="col-select">
+                                <label class="checkbox-container">
+                                    <input type="checkbox" class="file-checkbox" 
+                                           data-directory="{{ directory }}"
+                                           data-filepath="{{ file.file_path }}">
+                                    <span class="checkmark"></span>
+                                </label>
+                            </td>
+                            <td class="col-play">
+                                <button class="play-btn" data-filepath="{{ file.file_path }}" title="Abspielen">
+                                    ▶
+                                </button>
+                            </td>
+                            <td class="col-filename" title="{{ file.filename }}">
+                                <span class="filename">{{ file.filename }}</span>
+                                <span class="file-size">({{ "%.1f"|format(file.size / 1024 / 1024) }} MB)</span>
+                            </td>
+                            <td class="col-track">
+                                <input type="text" class="track-input" value="{{ file.track_number }}" 
+                                       data-original="{{ file.track_number }}" maxlength="3">
+                            </td>
+                            <td class="col-title">
+                                <input type="text" class="title-input" value="{{ file.title }}" 
+                                       data-original="{{ file.title }}">
+                            </td>
+                            <td class="col-artist">
+                                <input type="text" class="artist-input" value="{{ file.artist }}" 
+                                       data-original="{{ file.artist }}">
+                            </td>
+                            <td class="col-album">
+                                <input type="text" class="album-input" value="{{ file.album }}" 
+                                       data-original="{{ file.album }}">
+                            </td>
+                            <td class="col-cover">
+                                <span class="cover-status {{ 'has-cover' if file.cover_status != 'Nein' else 'no-cover' }}" 
+                                      title="Cover-Status: {{ file.cover_status }}">
+                                    {{ file.cover_status }}
+                                </span>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- Audio Player (versteckt) -->
+    <audio id="audio-player" preload="none"></audio>
+
+    <script>
+        // Globale Variablen
+        let selectedFiles = new Set();
+        let currentAudio = null;
+        let currentPlayButton = null;
+
+        // DOM Ready
+        document.addEventListener('DOMContentLoaded', function() {
+            initializeControls();
+            initializePlayback();
+            updateBatchButton();
+        });
+
+        // Initialisierung der Auswahlkontrollen
+        function initializeControls() {
+            // Globale "Alle auswählen/abwählen"
+            const globalSelect = document.getElementById('select-all-global');
+            globalSelect.addEventListener('change', function() {
+                const checkboxes = document.querySelectorAll('.file-checkbox');
+                checkboxes.forEach(cb => {
+                    cb.checked = this.checked;
+                    toggleFileSelection(cb.dataset.filepath, this.checked);
+                });
+                updateDirectorySelects();
+                updateBatchButton();
+            });
+
+            // Verzeichnis-spezifische "Alle auswählen/abwählen"
+            const directorySelects = document.querySelectorAll('.select-all-directory');
+            directorySelects.forEach(select => {
+                select.addEventListener('change', function() {
+                    const directory = this.dataset.directory;
+                    const checkboxes = document.querySelectorAll(`.file-checkbox[data-directory="${directory}"]`);
+                    
+                    checkboxes.forEach(cb => {
+                        cb.checked = this.checked;
+                        toggleFileSelection(cb.dataset.filepath, this.checked);
+                    });
+                    updateGlobalSelect();
+                    updateBatchButton();
+                });
+            });
+
+            // Einzelne Datei-Checkboxen
+            const fileCheckboxes = document.querySelectorAll('.file-checkbox');
+            fileCheckboxes.forEach(cb => {
+                cb.addEventListener('change', function() {
+                    toggleFileSelection(this.dataset.filepath, this.checked);
+                    updateDirectorySelects();
+                    updateGlobalSelect();
+                    updateBatchButton();
+                });
+            });
+        }
+
+        // Datei-Auswahl umschalten
+        function toggleFileSelection(filepath, selected) {
+            if (selected) {
+                selectedFiles.add(filepath);
+            } else {
+                selectedFiles.delete(filepath);
+            }
+        }
+
+        // Verzeichnis-Auswahl-Status aktualisieren
+        function updateDirectorySelects() {
+            const directorySelects = document.querySelectorAll('.select-all-directory');
+            directorySelects.forEach(select => {
+                const directory = select.dataset.directory;
+                const checkboxes = document.querySelectorAll(`.file-checkbox[data-directory="${directory}"]`);
+                const checkedBoxes = document.querySelectorAll(`.file-checkbox[data-directory="${directory}"]:checked`);
+                
+                if (checkedBoxes.length === 0) {
+                    select.indeterminate = false;
+                    select.checked = false;
+                } else if (checkedBoxes.length === checkboxes.length) {
+                    select.indeterminate = false;
+                    select.checked = true;
+                } else {
+                    select.indeterminate = true;
+                    select.checked = false;
+                }
+            });
+        }
+
+        // Globale Auswahl-Status aktualisieren
+        function updateGlobalSelect() {
+            const globalSelect = document.getElementById('select-all-global');
+            const allCheckboxes = document.querySelectorAll('.file-checkbox');
+            const checkedBoxes = document.querySelectorAll('.file-checkbox:checked');
+            
+            if (checkedBoxes.length === 0) {
+                globalSelect.indeterminate = false;
+                globalSelect.checked = false;
+            } else if (checkedBoxes.length === allCheckboxes.length) {
+                globalSelect.indeterminate = false;
+                globalSelect.checked = true;
+            } else {
+                globalSelect.indeterminate = true;
+                globalSelect.checked = false;
+            }
+        }
+
+        // Batch-Button aktualisieren
+        function updateBatchButton() {
+            const batchButton = document.getElementById('batch-process');
+            const count = selectedFiles.size;
+            
+            batchButton.textContent = `Ausgewählte verarbeiten (${count})`;
+            batchButton.disabled = count === 0;
+        }
+
+        // Playback-Funktionalität initialisieren
+        function initializePlayback() {
+            const playButtons = document.querySelectorAll('.play-btn');
+            const audioPlayer = document.getElementById('audio-player');
+            
+            playButtons.forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const filepath = this.dataset.filepath;
+                    togglePlayback(this, filepath, audioPlayer);
+                });
+            });
+        }
+
+        // Playback umschalten
+        function togglePlayback(button, filepath, audioPlayer) {
+            if (currentAudio && !currentAudio.paused && currentPlayButton === button) {
+                // Stoppe aktuellen Track
+                currentAudio.pause();
+                button.textContent = "▶";
+                button.classList.remove('playing');
+                currentAudio = null;
+                currentPlayButton = null;
+            } else {
+                // Stoppe anderen Track falls vorhanden
+                if (currentAudio) {
+                    currentAudio.pause();
+                    if (currentPlayButton) {
+                        currentPlayButton.textContent = "▶";
+                        currentPlayButton.classList.remove('playing');
+                    }
+                }
+                
+                // Starte neuen Track - entferne führende '/' für Flask-Routing
+                let cleanPath = filepath.startsWith('/') ? filepath.substring(1) : filepath;
+                audioPlayer.src = `/audio/${encodeURIComponent(cleanPath)}`;
+                console.log('Playing:', audioPlayer.src); // Debug
+                
+                audioPlayer.play().then(() => {
+                    button.textContent = "⏸";
+                    button.classList.add('playing');
+                    currentAudio = audioPlayer;
+                    currentPlayButton = button;
+                }).catch(error => {
+                    console.error('Fehler beim Abspielen:', error);
+                    alert('Fehler beim Abspielen der Datei: ' + error.message);
+                });
+            }
+            
+            // Event-Listener für Ende des Tracks
+            audioPlayer.addEventListener('ended', function() {
+                if (currentPlayButton) {
+                    currentPlayButton.textContent = "▶";
+                    currentPlayButton.classList.remove('playing');
+                }
+                currentAudio = null;
+                currentPlayButton = null;
+            });
+        }
+    </script>
 </body>
 </html>

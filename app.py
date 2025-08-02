@@ -5,6 +5,11 @@ Haupteinstiegspunkt der Webanwendung mit Historie-Funktionalität für
 zuletzt verwendete Verzeichnisse und modularer MP3-Verzeichnis-Verarbeitung.
 """
 
+from flask import Flask, render_template, request, redirect, url_for, send_file, abort
+import os
+from tagger.directory_history import DirectoryHistory
+from tagger.mp3_processor import scan_mp3_directory, get_mp3_statistics
+
 from flask import Flask, render_template, request, redirect, url_for
 import os
 from tagger.directory_history import get_directory_history
@@ -100,7 +105,8 @@ def results():
     """
     Ergebnisseite nach Verzeichniswahl.
     
-    Zeigt die gefundenen MP3-Dateien aus dem gewählten Verzeichnis an.
+    Zeigt die gefundenen MP3-Dateien aus dem gewählten Verzeichnis an,
+    gruppiert nach Unterverzeichnissen mit vollständigen Metadaten.
     
     Returns:
         Gerenderte results.html Vorlage oder Weiterleitung bei Fehlern
@@ -110,31 +116,55 @@ def results():
     if not mp3_dir or not os.path.isdir(mp3_dir):
         return redirect(url_for('index', error='Verzeichnis nicht gefunden'))
     
-    # Sammle MP3-Dateiformationen
-    mp3_files = []
-    mp3_count = 0
-    
     try:
-        for filename in os.listdir(mp3_dir):
-            if filename.lower().endswith('.mp3'):
-                file_path = os.path.join(mp3_dir, filename)
-                mp3_files.append({
-                    'name': filename,
-                    'path': file_path,
-                    'size': os.path.getsize(file_path)
-                })
-                mp3_count += 1
+        # Scanne Verzeichnis rekursiv nach MP3-Dateien
+        grouped_files = scan_mp3_directory(mp3_dir)
+        statistics = get_mp3_statistics(grouped_files)
         
-        # Sortiere nach Dateinamen
-        mp3_files.sort(key=lambda x: x['name'].lower())
+        if not grouped_files:
+            return redirect(url_for('index', error='Keine MP3-Dateien im Verzeichnis gefunden'))
+        
+        return render_template('results.html', 
+                             mp3_dir=mp3_dir,
+                             grouped_files=grouped_files,
+                             statistics=statistics)
         
     except (OSError, PermissionError) as e:
         return redirect(url_for('index', error=f'Fehler beim Lesen des Verzeichnisses: {e}'))
+    except Exception as e:
+        return redirect(url_for('index', error=f'Unerwarteter Fehler: {e}'))
+
+@app.route('/audio/<path:filepath>')
+def serve_audio(filepath):
+    """
+    Dient MP3-Dateien für das Audio-Streaming.
     
-    return render_template('results.html', 
-                         mp3_dir=mp3_dir, 
-                         mp3_files=mp3_files,
-                         mp3_count=mp3_count)
+    Args:
+        filepath: URL-encodierter Pfad zur MP3-Datei
+        
+    Returns:
+        MP3-Datei als Stream oder 404 bei Fehlern
+    """
+    try:
+        # Dekodiere den Pfad
+        import urllib.parse
+        decoded_path = urllib.parse.unquote(filepath)
+        
+        # Füge führende '/' hinzu falls sie fehlt (wegen Flask-Routing)
+        if not decoded_path.startswith('/'):
+            decoded_path = '/' + decoded_path
+        
+        # Sicherheitscheck: Datei muss existieren und .mp3 Endung haben
+        if not os.path.isfile(decoded_path) or not decoded_path.lower().endswith('.mp3'):
+            print(f"Audio-Datei nicht gefunden: {decoded_path}")  # Debug
+            abort(404)
+        
+        print(f"Streaming MP3: {decoded_path}")  # Debug
+        return send_file(decoded_path, mimetype='audio/mpeg')
+        
+    except Exception as e:
+        print(f"Fehler beim Audio-Streaming: {e}")  # Debug
+        abort(404)
 
 if __name__ == '__main__':
     app.run(debug=True)
