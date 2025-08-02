@@ -7,55 +7,13 @@ zuletzt verwendete Verzeichnisse und modularer MP3-Verzeichnis-Verarbeitung.
 
 from flask import Flask, render_template, request, redirect, url_for, send_file, abort
 import os
-from tagger.directory_history import DirectoryHistory
-from tagger.mp3_processor import scan_mp3_directory, get_mp3_statistics
-
-from flask import Flask, render_template, request, redirect, url_for
-import os
+import urllib.parse
 from tagger.directory_history import get_directory_history
+from tagger.mp3_processor import scan_mp3_directory, get_mp3_statistics
+from tagger.utils import has_mp3_files, count_mp3_files_in_directory, is_mp3_file
 
 app = Flask(__name__)
 
-def is_valid_mp3_dir(path):
-    """
-    Prüft, ob das angegebene Verzeichnis existiert und MP3-Dateien enthält (rekursiv).
-    
-    Args:
-        path: Pfad zum zu prüfenden Verzeichnis
-        
-    Returns:
-        bool: True wenn Verzeichnis existiert und MP3-Dateien enthält, sonst False
-    """
-    if not path or not os.path.isdir(path):
-        return False
-        
-    # Rekursive Suche nach MP3-Dateien
-    for root, dirs, files in os.walk(path):
-        for fname in files:
-            if fname.lower().endswith('.mp3'):
-                return True
-    return False
-
-
-def count_mp3_files(path):
-    """
-    Zählt die Anzahl der MP3-Dateien in einem Verzeichnis (rekursiv).
-    
-    Args:
-        path: Pfad zum Verzeichnis
-        
-    Returns:
-        int: Anzahl der gefundenen MP3-Dateien in allen Unterverzeichnissen
-    """
-    if not os.path.isdir(path):
-        return 0
-        
-    count = 0
-    for root, dirs, files in os.walk(path):
-        for fname in files:
-            if fname.lower().endswith('.mp3'):
-                count += 1
-    return count
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
@@ -82,14 +40,14 @@ def index():
         
         if not mp3_dir:
             error = 'Bitte geben Sie einen Verzeichnispfad an.'
-        elif not is_valid_mp3_dir(mp3_dir):
+        elif not has_mp3_files(mp3_dir):
             error = 'Ungültiges Verzeichnis oder keine MP3-Dateien gefunden.'
         else:
             # Absoluten Pfad sicherstellen
             abs_path = os.path.abspath(mp3_dir)
             
             # MP3-Dateien zählen und zur Historie hinzufügen
-            mp3_count = count_mp3_files(abs_path)
+            mp3_count = count_mp3_files_in_directory(abs_path)
             history.add_directory(abs_path, mp3_count)
             
             # Weiterleitung zur Ergebnisseite
@@ -147,7 +105,6 @@ def serve_audio(filepath):
     """
     try:
         # Dekodiere den Pfad
-        import urllib.parse
         decoded_path = urllib.parse.unquote(filepath)
         
         # Füge führende '/' hinzu falls sie fehlt (wegen Flask-Routing)
@@ -155,7 +112,7 @@ def serve_audio(filepath):
             decoded_path = '/' + decoded_path
         
         # Sicherheitscheck: Datei muss existieren und .mp3 Endung haben
-        if not os.path.isfile(decoded_path) or not decoded_path.lower().endswith('.mp3'):
+        if not os.path.isfile(decoded_path) or not is_mp3_file(decoded_path):
             abort(404)
         
         return send_file(decoded_path, mimetype='audio/mpeg')

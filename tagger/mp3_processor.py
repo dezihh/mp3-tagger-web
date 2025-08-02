@@ -12,6 +12,7 @@ from mutagen.mp3 import MP3
 from PIL import Image
 from mutagen.id3 import ID3NoHeaderError
 from typing import Dict, List, Any, Optional
+from .utils import is_mp3_file
 
 
 def get_image_dimensions_from_data(image_data: bytes) -> tuple:
@@ -221,7 +222,7 @@ def scan_mp3_directory(root_directory: str) -> Dict[str, List[MP3FileInfo]]:
         mp3_files_in_dir = []
         
         for file in files:
-            if file.lower().endswith('.mp3'):
+            if is_mp3_file(file):
                 file_path = os.path.join(root, file)
                 mp3_info = MP3FileInfo(file_path)
                 
