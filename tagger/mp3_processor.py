@@ -79,6 +79,8 @@ class MP3FileInfo:
         self.title = ""
         self.artist = ""
         self.album = ""
+        self.year = ""
+        self.genre = ""
         self.cover_status = "Nein"
         
         # Audio-Erkennungsergebnisse für fehlende Tags
@@ -92,6 +94,29 @@ class MP3FileInfo:
         self.recognized_album = None
         self.recognized_year = None
         self.recognized_track_number = None
+        
+        # Erweiterte Metadaten (ID3v2.4 Tags)
+        self.extended_metadata = {
+            'release_date': None,           # TDRC - Release-Datum
+            'bpm': None,                    # TBPM - BPM
+            'genres': [],                   # TCON - Erweiterte Genres
+            'mood': [],                     # TMOO - Stimmung/Mood
+            'similar_artists': [],          # Ähnliche Künstler (custom)
+            'energy': None,                 # Audio-Feature: Energy (0.0-1.0)
+            'danceability': None,           # Audio-Feature: Danceability (0.0-1.0)
+            'valence': None,                # Audio-Feature: Valence/Positivität (0.0-1.0)
+            'acousticness': None,           # Audio-Feature: Acousticness (0.0-1.0)
+            'instrumentalness': None,       # Audio-Feature: Instrumentalness (0.0-1.0)
+            'liveness': None,               # Audio-Feature: Liveness (0.0-1.0)
+            'speechiness': None,            # Audio-Feature: Speechiness (0.0-1.0)
+            'loudness': None,               # Audio-Feature: Loudness (dB)
+            'key': None,                    # Tonart (0-11)
+            'mode': None,                   # Dur/Moll (0/1)
+            'time_signature': None,         # Taktart
+            'popularity': None,             # Popularity-Score
+            'tags': [],                     # Last.fm Tags
+            'has_extended_data': False      # Flag für erweiterte Daten
+        }
         
         self._load_file_info()
         self._load_id3_tags()
@@ -110,10 +135,11 @@ class MP3FileInfo:
             self.size = 0
     
     def _load_id3_tags(self):
-        """Lädt ID3-Tags aus der MP3-Datei."""
+        """Lädt ID3-Tags aus der MP3-Datei, inklusive erweiterte Metadaten."""
         try:
             audio = MP3(self.file_path)
             
+            # Basis-Tags
             # Track-Nummer
             if 'TRCK' in audio:
                 track = str(audio['TRCK'][0])
@@ -133,10 +159,138 @@ class MP3FileInfo:
             # Album
             if 'TALB' in audio:
                 self.album = str(audio['TALB'][0])
+            
+            # Jahr
+            if 'TDRC' in audio:  # ID3v2.4
+                self.year = str(audio['TDRC'][0])
+            elif 'TYER' in audio:  # ID3v2.3
+                self.year = str(audio['TYER'][0])
+            
+            # Genre
+            if 'TCON' in audio:
+                self.genre = str(audio['TCON'][0])
+            
+            # Erweiterte Metadaten laden
+            self._load_extended_id3_tags(audio)
                 
         except (ID3NoHeaderError, Exception):
             # Fallback: Versuche Informationen aus Dateinamen zu extrahieren
             self._parse_filename()
+    
+    def _load_extended_id3_tags(self, audio):
+        """Lädt erweiterte ID3v2.4 Tags."""
+        try:
+            # Release-Datum
+            if 'TDRC' in audio:
+                self.extended_metadata['release_date'] = str(audio['TDRC'][0])
+            
+            # BPM
+            if 'TBPM' in audio:
+                try:
+                    self.extended_metadata['bpm'] = float(audio['TBPM'][0])
+                except ValueError:
+                    pass
+            
+            # Mood (Legacy TMOO Tag)
+            if 'TMOO' in audio:
+                mood_str = str(audio['TMOO'][0])
+                self.extended_metadata['mood'] = [m.strip() for m in mood_str.split(',')]
+            
+            # Erweiterte Genres (zusätzlich zu TCON)
+            if 'TCON' in audio:
+                genre_str = str(audio['TCON'][0])
+                # Genres können durch '/' oder ';' getrennt sein
+                genres = [g.strip() for g in genre_str.replace('/', ';').split(';')]
+                self.extended_metadata['genres'] = [g for g in genres if g]
+            
+            # TXXX (User-defined) Tags für erweiterte Metadaten
+            for tag_key, tag_value in audio.items():
+                if tag_key.startswith('TXXX:') and hasattr(tag_value, 'desc'):
+                    desc = tag_value.desc
+                    value = str(tag_value.text[0]) if tag_value.text else ''
+                    
+                    if desc == 'EXTENDED_GENRES' and value:
+                        extended_genres = [g.strip() for g in value.split(',')]
+                        existing_genres = self.extended_metadata.get('genres', [])
+                        # Kombiniere Standard-Genres mit erweiterten Genres
+                        all_genres = list(set(existing_genres + extended_genres))
+                        self.extended_metadata['genres'] = all_genres
+                    
+                    elif desc == 'MOOD' and value:
+                        self.extended_metadata['mood'] = [m.strip() for m in value.split(',')]
+                    
+                    elif desc == 'SIMILAR_ARTISTS' and value:
+                        self.extended_metadata['similar_artists'] = [a.strip() for a in value.split(',')]
+                    
+                    elif desc == 'AUDIO_FEATURES' and value:
+                        # Parse Audio Features: "energy:0.825, danceability:0.742, valence:0.893"
+                        for feature_str in value.split(','):
+                            if ':' in feature_str:
+                                feature_name, feature_value = feature_str.strip().split(':', 1)
+                                try:
+                                    self.extended_metadata[feature_name] = float(feature_value)
+                                except ValueError:
+                                    pass
+                    
+                    elif desc == 'TAGS' and value:
+                        self.extended_metadata['tags'] = [t.strip() for t in value.split(',')]
+                    
+                    elif desc == 'RELEASE_DATE' and value:
+                        self.extended_metadata['release_date'] = value
+                    
+                    elif desc == 'POPULARITY' and value:
+                        try:
+                            self.extended_metadata['popularity'] = int(value)
+                        except ValueError:
+                            pass
+            
+            # Legacy Custom Tags für Audio Features (Rückwärtskompatibilität)
+            legacy_fields = [
+                'TXXX:ENERGY', 'TXXX:DANCEABILITY', 'TXXX:VALENCE',
+                'TXXX:ACOUSTICNESS', 'TXXX:INSTRUMENTALNESS', 'TXXX:LIVENESS',
+                'TXXX:SPEECHINESS', 'TXXX:LOUDNESS', 'TXXX:KEY', 'TXXX:MODE',
+                'TXXX:TIME_SIGNATURE', 'TXXX:POPULARITY', 'TXXX:SIMILAR_ARTISTS'
+            ]
+            
+            for field in legacy_fields:
+                if field in audio:
+                    field_name = field.split(':')[1].lower()
+                    value = str(audio[field][0])
+                    
+                    if field_name in ['energy', 'danceability', 'valence', 'acousticness', 
+                                    'instrumentalness', 'liveness', 'speechiness']:
+                        try:
+                            self.extended_metadata[field_name] = float(value)
+                        except ValueError:
+                            pass
+                    elif field_name in ['loudness']:
+                        try:
+                            self.extended_metadata[field_name] = float(value)
+                        except ValueError:
+                            pass
+                    elif field_name in ['key', 'mode', 'time_signature', 'popularity']:
+                        try:
+                            self.extended_metadata[field_name] = int(value)
+                        except ValueError:
+                            pass
+                    elif field_name == 'similar_artists':
+                        self.extended_metadata['similar_artists'] = [a.strip() for a in value.split(',')]
+            
+            # Prüfen ob erweiterte Daten vorhanden sind
+            self.extended_metadata['has_extended_data'] = any([
+                self.extended_metadata.get('bpm'),
+                self.extended_metadata.get('energy'),
+                self.extended_metadata.get('mood'),
+                len(self.extended_metadata.get('similar_artists', [])) > 0,
+                len(self.extended_metadata.get('tags', [])) > 0,
+                self.extended_metadata.get('popularity') is not None
+            ])
+            
+        except Exception as e:
+            pass  # Erweiterte Tags sind optional
+            
+        except Exception as e:
+            pass  # Erweiterte Tags sind optional
     
     def _parse_filename(self):
         """Extrahiert Metadaten aus dem Dateinamen als Fallback."""
@@ -266,23 +420,40 @@ class MP3FileInfo:
         return self.track_number
 
 
-def scan_mp3_directory(root_directory: str) -> Dict[str, List[MP3FileInfo]]:
+def scan_mp3_directory(root_directory: str, max_files: int = 5000, max_dirs: int = 200) -> Dict[str, List[MP3FileInfo]]:
     """
     Scannt ein Verzeichnis rekursiv nach MP3-Dateien und gruppiert sie nach Unterverzeichnissen.
     
     Args:
         root_directory: Pfad zum Stammverzeichnis
+        max_files: Maximale Anzahl zu verarbeitender MP3-Dateien (Standard: 5000)
+        max_dirs: Maximale Anzahl zu verarbeitender Verzeichnisse (Standard: 200)
         
     Returns:
         Dictionary mit relativen Verzeichnispfaden als Schlüssel und Listen von MP3FileInfo als Werte
     """
     grouped_files = {}
+    total_files_processed = 0
+    total_dirs_processed = 0
+    
+    print(f"🔍 Scanne Verzeichnis: {root_directory}")
+    print(f"📊 Limits: {max_files} Dateien, {max_dirs} Verzeichnisse")
     
     for root, dirs, files in os.walk(root_directory):
+        # Prüfe Verzeichnis-Limit
+        if total_dirs_processed >= max_dirs:
+            print(f"⚠️ Verzeichnis-Limit erreicht ({max_dirs}). Verarbeitung gestoppt.")
+            break
+            
         mp3_files_in_dir = []
         
         for file in files:
             if is_mp3_file(file):
+                # Prüfe Datei-Limit
+                if total_files_processed >= max_files:
+                    print(f"⚠️ Datei-Limit erreicht ({max_files}). Verarbeitung gestoppt.")
+                    break
+                    
                 file_path = os.path.join(root, file)
                 mp3_info = MP3FileInfo(file_path)
                 
@@ -293,6 +464,11 @@ def scan_mp3_directory(root_directory: str) -> Dict[str, List[MP3FileInfo]]:
                 mp3_info.relative_directory = relative_path
                 
                 mp3_files_in_dir.append(mp3_info)
+                total_files_processed += 1
+        
+        # Breche ab wenn Datei-Limit erreicht
+        if total_files_processed >= max_files:
+            break
         
         if mp3_files_in_dir:
             # Sortiere nach Track-Nummer und dann nach Dateinamen
@@ -303,6 +479,13 @@ def scan_mp3_directory(root_directory: str) -> Dict[str, List[MP3FileInfo]]:
                 relative_path = os.path.basename(root_directory)
             
             grouped_files[relative_path] = mp3_files_in_dir
+            total_dirs_processed += 1
+    
+    print(f"✅ Scan abgeschlossen: {total_files_processed} Dateien in {total_dirs_processed} Verzeichnissen")
+    if total_files_processed >= max_files:
+        print(f"⚠️ Hinweis: Nicht alle Dateien wurden geladen (Limit: {max_files})")
+    if total_dirs_processed >= max_dirs:
+        print(f"⚠️ Hinweis: Nicht alle Verzeichnisse wurden geladen (Limit: {max_dirs})")
     
     return grouped_files
 

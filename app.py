@@ -18,6 +18,7 @@ from tagger.mp3_processor import (
 from tagger.utils import has_mp3_files, count_mp3_files_in_directory, is_mp3_file, get_detailed_mp3_info, save_mp3_tags
 from tagger.audio_recognition import create_recognition_service, AudioRecognitionBatch
 from tagger.album_recognition import create_album_recognition_service
+from tagger.extended_metadata import create_extended_metadata_service
 
 app = Flask(__name__)
 
@@ -106,9 +107,29 @@ def results():
         return redirect(url_for('index', error='Verzeichnis nicht gefunden'))
     
     try:
-        # Scanne Verzeichnis rekursiv nach MP3-Dateien
-        grouped_files = scan_mp3_directory(mp3_dir)
+        # Zähle schnell die MP3-Dateien
+        total_mp3_count = count_mp3_files_in_directory(mp3_dir)
+        
+        # Dynamische Limits basierend auf Verzeichnisgröße
+        if total_mp3_count > 10000:
+            max_files, max_dirs = 2000, 100  # Sehr große Sammlung
+        elif total_mp3_count > 5000:
+            max_files, max_dirs = 3000, 150  # Große Sammlung
+        elif total_mp3_count > 1000:
+            max_files, max_dirs = 5000, 200  # Mittlere Sammlung
+        else:
+            max_files, max_dirs = 10000, 500  # Kleine Sammlung (kein effektives Limit)
+        
+        print(f"📊 Verzeichnis hat {total_mp3_count} MP3-Dateien, verwende Limits: {max_files} Dateien, {max_dirs} Verzeichnisse")
+        
+        # Scanne Verzeichnis rekursiv nach MP3-Dateien mit Limits
+        grouped_files = scan_mp3_directory(mp3_dir, max_files=max_files, max_dirs=max_dirs)
         statistics = get_mp3_statistics(grouped_files)
+        
+        # Füge Information über Limitierung hinzu
+        statistics['total_estimated'] = total_mp3_count
+        statistics['is_limited'] = statistics['total_files'] < total_mp3_count
+        statistics['limit_reason'] = f"Nur die ersten {max_files} Dateien aus {max_dirs} Verzeichnissen werden angezeigt" if statistics['is_limited'] else ""
         
         if not grouped_files:
             return redirect(url_for('index', error='Keine MP3-Dateien im Verzeichnis gefunden'))
@@ -630,6 +651,133 @@ def apply_album():
         return jsonify({
             'success': False,
             'message': f'Fehler beim Anwenden der Album-Daten: {str(e)}'
+        })
+
+
+@app.route('/api/extended-metadata', methods=['POST'])
+def get_extended_metadata():
+    """
+    API-Endpoint für erweiterte Metadaten-Sammlung von Last.fm und Spotify.
+    
+    Sammelt:
+    - Release-Datum, BPM, erweiterte Genres
+    - Mood, ähnliche Künstler, Audio-Features  
+    - Energy, Danceability, Valence etc.
+    """
+    try:
+        data = request.get_json()
+        selected_files = data.get('selected_files', [])
+        mp3_dir = data.get('directory', '')
+        
+        if not selected_files:
+            return jsonify({
+                'success': False,
+                'message': 'Keine Dateien ausgewählt'
+            })
+        
+        # Extended Metadata Service erstellen
+        extended_service = create_extended_metadata_service()
+        collected_metadata = {}
+        processed = 0
+        
+        # Für jede ausgewählte Datei Metadaten sammeln
+        for filepath in selected_files:
+            try:
+                full_path = os.path.join(mp3_dir, os.path.basename(filepath))
+                
+                # MP3-Datei-Info laden für Artist/Title
+                from tagger.mp3_processor import MP3FileInfo
+                mp3_info = MP3FileInfo(full_path)
+                
+                if mp3_info.artist and mp3_info.title:
+                    # Extended Metadata sammeln
+                    metadata = asyncio.run(extended_service.get_track_metadata(
+                        mp3_info.artist, mp3_info.title, mp3_info.album
+                    ))
+                    
+                    if metadata.success:
+                        collected_metadata[full_path] = {
+                            'artist': mp3_info.artist,
+                            'title': mp3_info.title,
+                            'album': mp3_info.album,
+                            'release_date': metadata.release_date,
+                            'bpm': metadata.audio_features.tempo,
+                            'genres': metadata.genres + metadata.extended_genres,
+                            'mood': metadata.mood,
+                            'similar_artists': metadata.similar_artists,
+                            'energy': metadata.audio_features.energy,
+                            'danceability': metadata.audio_features.danceability,
+                            'valence': metadata.audio_features.valence,
+                            'acousticness': metadata.audio_features.acousticness,
+                            'popularity': metadata.popularity,
+                            'tags': metadata.tags,
+                            'sources_used': metadata.sources_used
+                        }
+                        
+                        # Optional: Sofort in MP3-Datei speichern
+                        save_immediately = data.get('save_immediately', False)
+                        if save_immediately:
+                            try:
+                                # Bereite erweiterte Metadaten für Speicherung vor
+                                extended_data = {
+                                    'bpm': metadata.audio_features.tempo,
+                                    'genres': metadata.genres + metadata.extended_genres,
+                                    'mood': metadata.mood,
+                                    'similar_artists': metadata.similar_artists,
+                                    'energy': metadata.audio_features.energy,
+                                    'danceability': metadata.audio_features.danceability,
+                                    'valence': metadata.audio_features.valence,
+                                    'acousticness': metadata.audio_features.acousticness,
+                                    'instrumentalness': metadata.audio_features.instrumentalness,
+                                    'liveness': metadata.audio_features.liveness,
+                                    'speechiness': metadata.audio_features.speechiness,
+                                    'loudness': metadata.audio_features.loudness,
+                                    'key': metadata.audio_features.key,
+                                    'mode': metadata.audio_features.mode,
+                                    'time_signature': metadata.audio_features.time_signature,
+                                    'popularity': metadata.popularity,
+                                    'tags': metadata.tags,
+                                    'release_date': metadata.release_date
+                                }
+                                
+                                # Speichere in MP3-Datei
+                                tags_data = {
+                                    'extended_metadata': extended_data
+                                }
+                                
+                                from tagger.utils import save_mp3_tags
+                                save_result = save_mp3_tags(full_path, tags_data)
+                                
+                                if save_result['success']:
+                                    collected_metadata[full_path]['saved_to_file'] = True
+                                    collected_metadata[full_path]['save_message'] = save_result['message']
+                                else:
+                                    collected_metadata[full_path]['saved_to_file'] = False
+                                    collected_metadata[full_path]['save_error'] = save_result['message']
+                                    
+                            except Exception as save_error:
+                                collected_metadata[full_path]['saved_to_file'] = False
+                                collected_metadata[full_path]['save_error'] = str(save_error)
+                        
+                processed += 1
+                
+            except Exception as e:
+                print(f"Fehler bei Extended Metadata für {filepath}: {e}")
+                continue
+        
+        return jsonify({
+            'success': True,
+            'extended_metadata': collected_metadata,
+            'processed': processed,
+            'total': len(selected_files),
+            'message': f'Erweiterte Metadaten für {processed} von {len(selected_files)} Dateien gesammelt'
+        })
+        
+    except Exception as e:
+        print(f"Fehler bei Extended Metadata API: {e}")
+        return jsonify({
+            'success': False,
+            'message': f'Fehler beim Sammeln erweiterter Metadaten: {str(e)}'
         })
 
 

@@ -164,7 +164,7 @@ def _collect_id3_tags(audio: MP3, info: Dict[str, Any]) -> None:
                 value = f"{track_parts[0]}/{track_parts[1]}" if len(track_parts) > 1 else track_parts[0]
             info['basic'][tag_name] = value
     
-    # Erweiterte Tags (seltener verwendet)
+    # Erweiterte Standard-Tags (seltener verwendet)
     extended_tag_mapping = {
         'TPE2': 'Album Artist', 'TPE3': 'Dirigent', 'TCOM': 'Komponist',
         'TYER': 'Jahr (alt)', 'TBPM': 'BPM', 'TKEY': 'Tonart',
@@ -174,24 +174,106 @@ def _collect_id3_tags(audio: MP3, info: Dict[str, Any]) -> None:
     for tag_id, tag_name in extended_tag_mapping.items():
         if tag_id in tags:
             info['extended'][tag_name] = str(tags[tag_id][0])
+    
+    # Erweiterte Metadaten aus TXXX-Tags sammeln
+    extended_metadata_mapping = {
+        'EXTENDED_GENRES': '🎪 Genres (erweitert)',
+        'MOOD': '🎭 Mood',
+        'SIMILAR_ARTISTS': '👥 Ähnliche Künstler',
+        'AUDIO_FEATURES': '🎵 Audio Features',
+        'TAGS': '🏷️ Tags',
+        'RELEASE_DATE': '📅 Release Datum',
+        'POPULARITY': '⭐ Beliebtheit'
+    }
+    
+    # TXXX (User-defined) Tags durchsuchen
+    for tag_key, tag_value in tags.items():
+        if tag_key.startswith('TXXX:') and hasattr(tag_value, 'desc'):
+            desc = tag_value.desc
+            value = str(tag_value.text[0]) if tag_value.text else ''
+            
+            if desc in extended_metadata_mapping and value:
+                label = extended_metadata_mapping[desc]
+                
+                # Spezielle Formatierung für verschiedene Datentypen
+                if desc == 'AUDIO_FEATURES':
+                    # Parse "energy:0.825, danceability:0.742" zu lesbar
+                    features = []
+                    for feature in value.split(','):
+                        if ':' in feature:
+                            name, val = feature.strip().split(':', 1)
+                            try:
+                                # Namen übersetzen
+                                feature_names = {
+                                    'energy': 'Energy', 'danceability': 'Danceability',
+                                    'valence': 'Valence', 'acousticness': 'Acousticness'
+                                }
+                                display_name = feature_names.get(name, name.title())
+                                features.append(f"{display_name}: {float(val):.2f}")
+                            except ValueError:
+                                features.append(f"{name}: {val}")
+                    value = ', '.join(features) if features else value
+                
+                elif desc == 'POPULARITY':
+                    try:
+                        pop_val = int(value)
+                        value = f"{pop_val}/100"
+                    except ValueError:
+                        pass
+                        
+                elif desc in ['SIMILAR_ARTISTS', 'EXTENDED_GENRES', 'TAGS']:
+                    # Limitiere die Anzahl der angezeigten Items für bessere Lesbarkeit
+                    items = [item.strip() for item in value.split(',')]
+                    if len(items) > 5:
+                        value = ', '.join(items[:5]) + f' (+{len(items)-5} weitere)'
+                    else:
+                        value = ', '.join(items)
+                
+                info['extended'][label] = value
 
 
 def _collect_cover_info(audio: MP3, info: Dict[str, Any]) -> None:
     """Sammelt Cover-Informationen und erstellt Thumbnail."""
-    if not hasattr(audio, 'tags') or not audio.tags:
-        return
-        
-    tags = audio.tags
-    apic_frames = [tag for tag in tags.values() if hasattr(tag, 'type') and hasattr(tag, 'data')]
+    file_path = audio.filename
+    cover_data = None
+    cover_source = None
     
-    if not apic_frames:
+    # Erst nach eingebetteten Covern suchen
+    if hasattr(audio, 'tags') and audio.tags:
+        tags = audio.tags
+        apic_frames = [tag for tag in tags.values() if hasattr(tag, 'type') and hasattr(tag, 'data')]
+        
+        if apic_frames:
+            cover_frame = apic_frames[0]
+            cover_data = cover_frame.data
+            cover_source = "embedded"
+    
+    # Wenn kein eingebettetes Cover gefunden, nach externen Covern suchen
+    if not cover_data:
+        directory = os.path.dirname(file_path)
+        cover_extensions = ['.jpg', '.jpeg', '.png', '.gif', '.bmp']
+        cover_names = ['cover', 'folder', 'albumart', 'front']
+        
+        try:
+            for file in os.listdir(directory):
+                file_lower = file.lower()
+                if any(file_lower.endswith(ext) for ext in cover_extensions):
+                    if any(name in file_lower for name in cover_names):
+                        external_cover_path = os.path.join(directory, file)
+                        try:
+                            with open(external_cover_path, 'rb') as f:
+                                cover_data = f.read()
+                                cover_source = "external"
+                                break
+                        except Exception:
+                            continue
+        except OSError:
+            pass
+    
+    if not cover_data:
         return
     
     try:
-        # Erstes verfügbares Cover verwenden
-        cover_frame = apic_frames[0]
-        cover_data = cover_frame.data
-        
         # Cover-Informationen via PIL analysieren
         with Image.open(BytesIO(cover_data)) as img:
             width, height = img.size
@@ -211,6 +293,7 @@ def _collect_cover_info(audio: MP3, info: Dict[str, Any]) -> None:
                 'height': height,
                 'size': f"{len(cover_data) / 1024:.1f} KB",
                 'format': cover_format,
+                'source': cover_source,
                 'data': thumbnail_data
             }
             
@@ -284,8 +367,9 @@ def _update_id3_tags(tags, tags_data: Dict[str, Any]) -> int:
         int: Anzahl der aktualisierten Tags
     """
     # Optimierte Tag-Mappings mit Frame-Klassen
-    from mutagen.id3 import TIT2, TPE1, TALB, TDRC, TRCK, TCON
+    from mutagen.id3 import TIT2, TPE1, TALB, TDRC, TRCK, TCON, TBPM, COMM, TXXX
     
+    # Standard-Tags
     tag_mappings = {
         'title': ('TIT2', TIT2),
         'artist': ('TPE1', TPE1),
@@ -297,6 +381,7 @@ def _update_id3_tags(tags, tags_data: Dict[str, Any]) -> int:
     
     updated_count = 0
     
+    # Standard-Tags aktualisieren
     for field, (tag_id, frame_class) in tag_mappings.items():
         if field in tags_data and tags_data[field] is not None:
             value = str(tags_data[field]).strip()
@@ -312,4 +397,96 @@ def _update_id3_tags(tags, tags_data: Dict[str, Any]) -> int:
                     tags[tag_id] = frame_class(encoding=3, text=[value])
                     updated_count += 1
     
+    # Erweiterte Metadaten verarbeiten
+    if 'extended_metadata' in tags_data and tags_data['extended_metadata']:
+        extended = tags_data['extended_metadata']
+        
+        # BPM speichern
+        if extended.get('bpm') and extended['bpm']:
+            try:
+                bpm_value = int(float(extended['bpm']))
+                current_bpm = ''
+                if 'TBPM' in tags:
+                    current_bpm = str(tags['TBPM'][0]) if tags['TBPM'] else ''
+                
+                if current_bpm != str(bpm_value):
+                    tags['TBPM'] = TBPM(encoding=3, text=[str(bpm_value)])
+                    updated_count += 1
+            except (ValueError, TypeError):
+                pass
+        
+        # Erweiterte Genres als TXXX speichern
+        if extended.get('genres') and extended['genres']:
+            genres_text = ', '.join(extended['genres'])
+            if _update_txxx_tag(tags, 'EXTENDED_GENRES', genres_text):
+                updated_count += 1
+        
+        # Mood als TXXX speichern
+        if extended.get('mood') and extended['mood']:
+            mood_text = ', '.join(extended['mood']) if isinstance(extended['mood'], list) else str(extended['mood'])
+            if _update_txxx_tag(tags, 'MOOD', mood_text):
+                updated_count += 1
+        
+        # Ähnliche Künstler als TXXX speichern
+        if extended.get('similar_artists') and extended['similar_artists']:
+            artists_text = ', '.join(extended['similar_artists'][:5])  # Max 5 Künstler
+            if _update_txxx_tag(tags, 'SIMILAR_ARTISTS', artists_text):
+                updated_count += 1
+        
+        # Audio Features als TXXX speichern
+        audio_features = []
+        for feature in ['energy', 'danceability', 'valence', 'acousticness']:
+            if extended.get(feature) and extended[feature] is not None:
+                audio_features.append(f"{feature}:{extended[feature]:.3f}")
+        
+        if audio_features:
+            if _update_txxx_tag(tags, 'AUDIO_FEATURES', ', '.join(audio_features)):
+                updated_count += 1
+        
+        # Tags als TXXX speichern
+        if extended.get('tags') and extended['tags']:
+            tags_text = ', '.join(extended['tags'][:10])  # Max 10 Tags
+            if _update_txxx_tag(tags, 'TAGS', tags_text):
+                updated_count += 1
+        
+        # Release Date als TXXX speichern
+        if extended.get('release_date') and extended['release_date']:
+            if _update_txxx_tag(tags, 'RELEASE_DATE', str(extended['release_date'])):
+                updated_count += 1
+        
+        # Popularity als TXXX speichern
+        if extended.get('popularity') and extended['popularity'] is not None:
+            if _update_txxx_tag(tags, 'POPULARITY', str(extended['popularity'])):
+                updated_count += 1
+    
     return updated_count
+
+
+def _update_txxx_tag(tags, desc: str, value: str) -> bool:
+    """
+    Aktualisiert einen TXXX (User-defined text) Tag.
+    
+    Returns:
+        bool: True wenn der Tag aktualisiert wurde
+    """
+    from mutagen.id3 import TXXX
+    
+    # Aktuellen Wert prüfen
+    current_value = ''
+    for tag in tags.values():
+        if hasattr(tag, 'desc') and tag.desc == desc:
+            current_value = str(tag.text[0]) if tag.text else ''
+            break
+    
+    # Nur aktualisieren wenn sich der Wert geändert hat
+    if current_value != value:
+        # Entferne alten Tag falls vorhanden
+        for key in list(tags.keys()):
+            if key.startswith('TXXX:') and hasattr(tags[key], 'desc') and tags[key].desc == desc:
+                del tags[key]
+        
+        # Neuen Tag hinzufügen
+        tags[f'TXXX:{desc}'] = TXXX(encoding=3, desc=desc, text=[value])
+        return True
+    
+    return False

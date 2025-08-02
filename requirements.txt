@@ -6,3 +6,5 @@ pyacoustid
 shazamio
 musicbrainzngs
 discogs-client
+aiohttp
+spotipy

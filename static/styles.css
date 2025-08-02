@@ -121,6 +121,17 @@ button:hover {
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 
+.btn-warning {
+    background: linear-gradient(135deg, #f39c12, #e67e22);
+    color: white;
+}
+
+.btn-warning:hover:not(:disabled) {
+    background: linear-gradient(135deg, #e67e22, #d35400);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
 .back-button {
     display: inline-block;
     padding: 12px 24px;
@@ -254,6 +265,30 @@ button:hover {
     border-radius: 8px;
     max-width: 600px;
     box-sizing: border-box;
+}
+
+/* === WARNING MESSAGES === */
+.warning-box {
+    background: #fff3cd;
+    border: 1px solid #ffc107;
+    color: #856404;
+    padding: 15px 20px;
+    margin: 15px 0;
+    border-radius: 8px;
+    box-sizing: border-box;
+}
+
+.warning-box p {
+    margin: 5px 0;
+}
+
+.warning-box strong {
+    color: #743a00;
+}
+
+.warning-box em {
+    font-style: italic;
+    color: #6c5d0a;
 }
 
 /* === RESULTS PAGE LAYOUT === */
@@ -932,6 +967,24 @@ button:hover {
         min-width: 120px;
         max-width: 150px;
     }
+    
+    /* Mobile Tooltip Anpassungen */
+    .mp3-tooltip {
+        max-width: 95vw;
+        min-width: 300px;
+        font-size: 0.75rem;
+    }
+    
+    .tooltip-main-container {
+        flex-direction: column;
+        gap: 15px;
+    }
+    
+    .tooltip-right-column {
+        flex: none;
+        align-self: center;
+    }
+}
 }
 
 @media (max-width: 480px) {
@@ -1047,4 +1100,64 @@ button:hover {
 
 .toast-info {
     border-left: 4px solid #3498db;
+}
+
+/* === EXTENDED METADATA MODAL === */
+.extended-metadata-modal {
+    max-width: 800px;
+    max-height: 80vh;
+    overflow-y: auto;
+}
+
+.extended-metadata-list {
+    max-height: 60vh;
+    overflow-y: auto;
+}
+
+.metadata-item {
+    background: #f8f9fa;
+    border-radius: 6px;
+    padding: 15px;
+    margin-bottom: 15px;
+    border-left: 4px solid #3498db;
+}
+
+.metadata-header h4 {
+    margin: 0 0 5px 0;
+    color: #2c3e50;
+    font-size: 1.1em;
+}
+
+.metadata-header small {
+    color: #7f8c8d;
+    font-style: italic;
+}
+
+.metadata-details {
+    margin-top: 10px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.metadata-tag {
+    background: #e3f2fd;
+    color: #1976d2;
+    padding: 4px 8px;
+    border-radius: 12px;
+    font-size: 0.85em;
+    font-weight: 500;
+    border: 1px solid #bbdefb;
+}
+
+.metadata-tag:nth-child(even) {
+    background: #f3e5f5;
+    color: #7b1fa2;
+    border-color: #e1bee7;
+}
+
+.metadata-tag:nth-child(3n) {
+    background: #e8f5e8;
+    color: #388e3c;
+    border-color: #c8e6c9;
 }

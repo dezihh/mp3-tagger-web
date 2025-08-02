@@ -13,6 +13,14 @@
             <h2>📁 {{ mp3_dir }}</h2>
             <p>{{ statistics.total_files }} MP3-Dateien in {{ statistics.total_directories }} Verzeichnissen 
                ({{ "%.1f"|format(statistics.total_size_mb) }} MB)</p>
+            
+            {% if statistics.is_limited %}
+            <div class="warning-box">
+                <p><strong>⚠️ Limitierte Anzeige:</strong> Dieses Verzeichnis enthält {{ statistics.total_estimated }} MP3-Dateien. 
+                {{ statistics.limit_reason }} für eine bessere Performance.</p>
+                <p><em>Tipp: Arbeiten Sie mit kleineren Unterverzeichnissen für die vollständige Funktionalität.</em></p>
+            </div>
+            {% endif %}
         </div>
     </div>
     
@@ -34,6 +42,9 @@
             </button>
             <button id="albumRecognitionBtn" class="btn btn-info" title="Album-Erkennung für bessere Metadaten">
                 💿 Album-Erkennung
+            </button>
+            <button id="extendedMetadataBtn" class="btn btn-warning" title="Erweiterte Metadaten (BPM, Mood, Energy, etc.)">
+                🎯 Erweiterte Metadaten
             </button>
             <button id="batchSaveBtn" class="btn btn-success" disabled>
                 <span id="saveCount">0</span> Dateien speichern
@@ -173,6 +184,7 @@
             initializeSaveFunction();
             initializeAudioRecognition();
             initializeAlbumRecognition();
+            initializeExtendedMetadata();
             updateBatchButton();
         });
 
@@ -408,25 +420,52 @@
 
         function updateTooltipPosition(event) {
             const tooltip = tooltipElement;
-            const margin = 10;
-            let x = event.pageX + margin;
-            let y = event.pageY + margin;
-
-            // Bildschirm-Grenzen respektieren
+            const margin = 15;
+            
+            // Erst eine temporäre Position setzen, um die Größe zu messen
+            tooltip.style.left = '0px';
+            tooltip.style.top = '0px';
+            tooltip.style.visibility = 'hidden';
+            tooltip.style.display = 'block';
+            
+            // Jetzt die echte Größe messen
             const tooltipRect = tooltip.getBoundingClientRect();
             const windowWidth = window.innerWidth;
             const windowHeight = window.innerHeight;
-
-            if (x + tooltipRect.width > windowWidth) {
+            const scrollX = window.pageXOffset || document.documentElement.scrollLeft;
+            const scrollY = window.pageYOffset || document.documentElement.scrollTop;
+            
+            // Startposition: rechts unten vom Cursor
+            let x = event.pageX + margin;
+            let y = event.pageY + margin;
+            
+            // Horizontale Anpassung bei Überlauf
+            if (event.clientX + tooltipRect.width + margin > windowWidth) {
                 x = event.pageX - tooltipRect.width - margin;
             }
-
-            if (y + tooltipRect.height > windowHeight) {
+            
+            // Vertikale Anpassung bei Überlauf
+            if (event.clientY + tooltipRect.height + margin > windowHeight) {
                 y = event.pageY - tooltipRect.height - margin;
+                
+                // Falls immer noch nicht passt, über dem Cursor positionieren
+                if (y < scrollY) {
+                    y = event.pageY - tooltipRect.height - margin;
+                    // Mindestabstand zum oberen Rand
+                    if (y < scrollY + 10) {
+                        y = scrollY + 10;
+                    }
+                }
             }
-
+            
+            // Sicherstellen, dass der Tooltip im Viewport bleibt
+            x = Math.max(scrollX + 10, Math.min(x, scrollX + windowWidth - tooltipRect.width - 10));
+            y = Math.max(scrollY + 10, Math.min(y, scrollY + windowHeight - tooltipRect.height - 10));
+            
+            // Finale Position setzen
             tooltip.style.left = x + 'px';
             tooltip.style.top = y + 'px';
+            tooltip.style.visibility = 'visible';
         }
 
         /* === TOOLTIP CONTENT RENDERING === */
@@ -960,6 +999,142 @@
         function handleAlbumRecognitionError(error, progressController) {
             handleApiError(error, 'Album-Erkennung');
             progressController.updateProgress(100, '', '❌ Fehler bei der Album-Erkennung');
+            document.getElementById('saveProgressStatus').style.color = '#e74c3c';
+            setTimeout(() => progressController.hide(), 3000);
+        }
+
+        /* === EXTENDED METADATA SYSTEM ===
+         * Sammelt erweiterte Metadaten von Last.fm und Spotify
+         */
+        function initializeExtendedMetadata() {
+            const extendedBtn = document.getElementById('extendedMetadataBtn');
+            if (extendedBtn) {
+                extendedBtn.addEventListener('click', performExtendedMetadata);
+            }
+        }
+
+        function performExtendedMetadata() {
+            const extendedBtn = document.getElementById('extendedMetadataBtn');
+            const mp3Dir = '{{ mp3_dir }}';
+            const selectedFilePaths = Array.from(selectedFiles);
+            
+            if (selectedFilePaths.length === 0) {
+                showUserMessage('Bitte wählen Sie mindestens eine Datei für erweiterte Metadaten aus.', 'warning');
+                return;
+            }
+            
+            // Button deaktivieren
+            extendedBtn.disabled = true;
+            extendedBtn.innerHTML = '🔍 Sammle Metadaten...';
+            
+            // Progress-System für Extended Metadata
+            const progressController = createUniversalProgressController({
+                title: '🎯 Erweiterte Metadaten werden gesammelt...'
+            });
+            progressController.show();
+            progressController.updateProgress(0, 'Sammle erweiterte Metadaten...');
+            
+            // API-Request für Extended Metadata
+            makeApiCall('/api/extended-metadata', {
+                method: 'POST',
+                body: JSON.stringify({
+                    directory: mp3Dir,
+                    selected_files: selectedFilePaths
+                })
+            })
+            .then(data => handleExtendedMetadataResponse(data, progressController))
+            .catch(error => handleExtendedMetadataError(error, progressController))
+            .finally(() => {
+                extendedBtn.disabled = false;
+                extendedBtn.innerHTML = '🎯 Erweiterte Metadaten';
+            });
+        }
+
+        function handleExtendedMetadataResponse(data, progressController) {
+            progressController.hide();
+            
+            if (data.success) {
+                const metadata = data.extended_metadata;
+                const processedCount = data.processed;
+                
+                if (processedCount === 0) {
+                    showUserMessage('Keine erweiterten Metadaten gefunden. Stellen Sie sicher, dass Artist und Titel vorhanden sind.', 'info');
+                    return;
+                }
+                
+                // Extended Metadata-Dialog anzeigen
+                showExtendedMetadataDialog(metadata);
+                showUserMessage(`Erweiterte Metadaten für ${processedCount} Dateien gesammelt!`, 'success', 4000);
+                
+            } else {
+                showUserMessage(`Fehler beim Sammeln erweiterter Metadaten: ${data.message}`, 'error');
+            }
+        }
+
+        function showExtendedMetadataDialog(metadata) {
+            // Erstelle Modal-Dialog für Extended Metadata
+            const modal = document.createElement('div');
+            modal.id = 'extendedMetadataModal';
+            modal.innerHTML = `
+                <div class="modal-overlay">
+                    <div class="modal-content extended-metadata-modal">
+                        <div class="modal-header">
+                            <h3>🎯 Erweiterte Metadaten</h3>
+                            <button class="modal-close" onclick="closeExtendedMetadataDialog()">×</button>
+                        </div>
+                        <div class="modal-body">
+                            <div class="extended-metadata-list">
+                                ${Object.entries(metadata).map(([filepath, data]) => `
+                                    <div class="metadata-item">
+                                        <div class="metadata-header">
+                                            <h4>${data.title} - ${data.artist}</h4>
+                                            <small>Quellen: ${data.sources_used.join(', ')}</small>
+                                        </div>
+                                        <div class="metadata-details">
+                                            ${data.bpm ? `<span class="metadata-tag">BPM: ${Math.round(data.bpm)}</span>` : ''}
+                                            ${data.energy ? `<span class="metadata-tag">Energy: ${Math.round(data.energy * 100)}%</span>` : ''}
+                                            ${data.danceability ? `<span class="metadata-tag">Danceability: ${Math.round(data.danceability * 100)}%</span>` : ''}
+                                            ${data.valence ? `<span class="metadata-tag">Valence: ${Math.round(data.valence * 100)}%</span>` : ''}
+                                            ${data.genres && data.genres.length > 0 ? `<span class="metadata-tag">Genres: ${data.genres.slice(0, 3).join(', ')}</span>` : ''}
+                                            ${data.mood && data.mood.length > 0 ? `<span class="metadata-tag">Mood: ${data.mood.slice(0, 2).join(', ')}</span>` : ''}
+                                            ${data.similar_artists && data.similar_artists.length > 0 ? `<span class="metadata-tag">Ähnlich: ${data.similar_artists.slice(0, 2).join(', ')}</span>` : ''}
+                                        </div>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button class="btn btn-secondary" onclick="closeExtendedMetadataDialog()">Schließen</button>
+                            <button class="btn btn-primary" onclick="applyExtendedMetadata()">Metadaten anwenden</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            document.body.appendChild(modal);
+            
+            // Store data for later use
+            window.extendedMetadataData = metadata;
+        }
+
+        function applyExtendedMetadata() {
+            // Hier könnte man die erweiterten Metadaten in die MP3-Dateien schreiben
+            // Für jetzt zeigen wir nur eine Erfolgsmeldung
+            showUserMessage('Extended Metadata-Speicherung noch nicht implementiert. Die Daten wurden gesammelt und angezeigt.', 'info', 6000);
+            closeExtendedMetadataDialog();
+        }
+
+        function closeExtendedMetadataDialog() {
+            const modal = document.getElementById('extendedMetadataModal');
+            if (modal) {
+                modal.remove();
+            }
+            delete window.extendedMetadataData;
+        }
+
+        function handleExtendedMetadataError(error, progressController) {
+            handleApiError(error, 'Erweiterte Metadaten-Sammlung');
+            progressController.updateProgress(100, '', '❌ Fehler bei erweiterten Metadaten');
             document.getElementById('saveProgressStatus').style.color = '#e74c3c';
             setTimeout(() => progressController.hide(), 3000);
         }
