@@ -1,3 +1,8 @@
 flask
 mutagen
 pillow
+python-dotenv
+pyacoustid
+shazamio
+musicbrainzngs
+discogs-client

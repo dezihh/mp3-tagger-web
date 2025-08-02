@@ -1,8 +1,27 @@
 """
 MP3 Tagger Web Application - Optimized Utility Functions
 
-Zentrale Hilfsfunktionen für MP3-Verarbeitung und Metadaten-Management.
-Alle häufig verwendeten Operationen sind hier zusammengefasst.
+Zentrale Hilfsfunktionen für die MP3 Tagger Web Application.
+Stellt wiederverwendbare, optimierte Funktionen für häufige Operationen bereit:
+
+Funktionsgruppen:
+- Datei-System: MP3-Validierung, Pfad-Normalisierung
+- Image-Processing: Cover-Art-Extraktion, Base64-Konvertierung, Größenanalyse  
+- String-Processing: Name-Normalisierung, Format-Validierung
+- ID3-Tag-Utilities: Tag-Extraktion, Validierung, Metadaten-Bereinigung
+
+Verwendung:
+    from tagger.utils import is_mp3_file, normalize_name, get_cover_art_base64
+    
+    # MP3-Validierung
+    if is_mp3_file(filename):
+        # Cover-Art extrahieren
+        cover_data = get_cover_art_base64(mp3_file)
+        
+        # Namen normalisieren
+        clean_name = normalize_name(artist_name)
+
+Diese Module ist optimiert für Performance und Wiederverwendbarkeit.
 """
 
 import os

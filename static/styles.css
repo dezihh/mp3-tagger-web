@@ -1,4 +1,6 @@
-/* MP3 Tagger Web - Unified Styles */
+/* ==========================================
+   MP3 TAGGER WEB - OPTIMIZED STYLES
+   ========================================== */
 
 /* === GLOBAL STYLES === */
 body {
@@ -31,7 +33,112 @@ h1 {
     box-sizing: border-box;
 }
 
-/* === SAVE PROGRESS === */
+.directory-form input[type="text"] {
+    width: 100%;
+    margin-bottom: 10px;
+}
+
+label {
+    font-weight: bold;
+    color: #34495e;
+}
+
+input[type="text"] {
+    padding: 8px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 0.9em;
+    box-sizing: border-box;
+}
+
+button {
+    background: #2980b9;
+    color: #fff;
+    border: none;
+    padding: 12px 20px;
+    border-radius: 4px;
+    font-size: 1em;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+button:hover {
+    background: #3498db;
+}
+
+/* === UNIFIED BUTTON SYSTEM === */
+.btn {
+    padding: 6px 12px;
+    border: none;
+    border-radius: 4px;
+    font-size: 0.8rem;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    text-decoration: none;
+    display: inline-block;
+    text-align: center;
+    font-weight: 600;
+    min-width: 80px;
+}
+
+.btn-primary {
+    background: linear-gradient(135deg, #3498db, #2980b9);
+    color: white;
+}
+
+.btn-primary:hover:not(:disabled) {
+    background: linear-gradient(135deg, #2980b9, #21618c);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.btn-primary:disabled {
+    background: #bdc3c7;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+}
+
+.btn-secondary {
+    background: #95a5a6;
+    color: white;
+}
+
+.btn-secondary:hover {
+    background: #7f8c8d;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.btn-success {
+    background: linear-gradient(135deg, #27ae60, #2ecc71);
+    color: white;
+}
+
+.btn-success:hover:not(:disabled) {
+    background: linear-gradient(135deg, #2ecc71, #58d68d);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.back-button {
+    display: inline-block;
+    padding: 12px 24px;
+    background: #95a5a6;
+    color: white;
+    text-decoration: none;
+    border-radius: 4px;
+    font-weight: 600;
+    transition: all 0.2s ease;
+}
+
+.back-button:hover {
+    background: #7f8c8d;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+/* === PROGRESS OVERLAY SYSTEM === */
 .save-progress-overlay {
     position: fixed;
     top: 0;
@@ -98,101 +205,7 @@ h1 {
     font-size: 0.9rem;
 }
 
-.directory-form input[type="text"] {
-    width: 100%;
-    margin-bottom: 10px;
-}
-
-label {
-    font-weight: bold;
-    color: #34495e;
-}
-
-input[type="text"] {
-    padding: 8px;
-    border: 1px solid #ccc;
-    border-radius: 4px;
-    font-size: 0.9em;
-    box-sizing: border-box;
-}
-
-button {
-    background: #2980b9;
-    color: #fff;
-    border: none;
-    padding: 12px 20px;
-    border-radius: 4px;
-    font-size: 1em;
-    cursor: pointer;
-    transition: background 0.2s;
-}
-
-button:hover {
-    background: #3498db;
-}
-
-/* === BUTTON STYLES === */
-.btn {
-    padding: 6px 12px;
-    border: none;
-    border-radius: 4px;
-    font-size: 0.8rem;
-    cursor: pointer;
-    transition: all 0.3s ease;
-    text-decoration: none;
-    display: inline-block;
-    text-align: center;
-    font-weight: 600;
-    min-width: 80px;
-}
-
-.btn-primary {
-    background: linear-gradient(135deg, #3498db, #2980b9);
-    color: white;
-}
-
-.btn-primary:hover:not(:disabled) {
-    background: linear-gradient(135deg, #2980b9, #21618c);
-    transform: translateY(-1px);
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-}
-
-.btn-primary:disabled {
-    background: #bdc3c7;
-    cursor: not-allowed;
-    transform: none;
-    box-shadow: none;
-}
-
-.btn-secondary {
-    background: #95a5a6;
-    color: white;
-}
-
-.btn-secondary:hover {
-    background: #7f8c8d;
-    transform: translateY(-1px);
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-}
-
-.back-button {
-    display: inline-block;
-    padding: 12px 24px;
-    background: #95a5a6;
-    color: white;
-    text-decoration: none;
-    border-radius: 4px;
-    font-weight: 600;
-    transition: all 0.2s ease;
-}
-
-.back-button:hover {
-    background: #7f8c8d;
-    transform: translateY(-1px);
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-}
-
-/* === HISTORY SECTION === */
+/* === NAVIGATION & HISTORY === */
 .history-section {
     max-width: 600px;
     margin: 15px auto;
@@ -243,7 +256,7 @@ button:hover {
     box-sizing: border-box;
 }
 
-/* === RESULTS PAGE === */
+/* === RESULTS PAGE LAYOUT === */
 .results-header {
     background: white;
     padding: 12px 20px;
@@ -298,7 +311,7 @@ button:hover {
     align-items: center;
 }
 
-/* === CHECKBOX STYLES === */
+/* === CHECKBOX SYSTEM === */
 .checkbox-container {
     display: flex;
     align-items: center;
@@ -356,7 +369,7 @@ button:hover {
     align-items: center;
 }
 
-/* === MP3 TABLE === */
+/* === MP3 TABLE SYSTEM === */
 .mp3-table-container {
     overflow-x: auto;
 }
@@ -391,37 +404,15 @@ button:hover {
     background-color: #f8f9fa;
 }
 
-/* === TABLE COLUMNS === */
-.col-select {
-    width: 35px;
-    text-align: center;
-}
+/* === TABLE COLUMN DEFINITIONS === */
+.col-select { width: 35px; text-align: center; }
+.col-play { width: 35px; text-align: center; }
+.col-filename { min-width: 180px; max-width: 250px; }
+.col-track { width: 50px; }
+.col-title, .col-artist, .col-album { min-width: 120px; max-width: 180px; }
+.col-cover { width: 65px; text-align: center; }
 
-.col-play {
-    width: 35px;
-    text-align: center;
-}
-
-.col-filename {
-    min-width: 180px;
-    max-width: 250px;
-}
-
-.col-track {
-    width: 50px;
-}
-
-.col-title, .col-artist, .col-album {
-    min-width: 120px;
-    max-width: 180px;
-}
-
-.col-cover {
-    width: 65px;
-    text-align: center;
-}
-
-/* === FILE DISPLAY === */
+/* === FILE DISPLAY ELEMENTS === */
 .filename {
     display: block;
     font-weight: 600;
@@ -429,6 +420,16 @@ button:hover {
     word-break: break-word;
     line-height: 1.2;
     font-size: 0.8rem;
+    cursor: help;
+    transition: color 0.2s ease;
+}
+
+.filename:hover {
+    color: #3498db;
+    text-decoration: underline;
+    background-color: rgba(52, 152, 219, 0.1);
+    padding: 2px 4px;
+    border-radius: 3px;
 }
 
 .file-size {
@@ -438,7 +439,7 @@ button:hover {
     margin-top: 1px;
 }
 
-/* === TABLE INPUT FIELDS === */
+/* === INPUT FIELD SYSTEM === */
 .mp3-table input[type="text"] {
     width: 100%;
     border: 1px solid #ddd;
@@ -462,7 +463,246 @@ button:hover {
     max-width: 40px;
 }
 
-/* === PLAY BUTTON === */
+/* === AUDIO RECOGNITION FIELDS === */
+.recognized-field {
+    background: linear-gradient(90deg, #d4edda 0%, #f8f9fa 100%) !important;
+    font-style: italic;
+    border-left: 4px solid #28a745 !important;
+    color: #155724;
+    position: relative;
+}
+
+.recognized-field::before {
+    content: "🎵";
+    position: absolute;
+    right: 3px;
+    top: 2px;
+    font-size: 0.7rem;
+    opacity: 0.7;
+}
+
+.recognized-field:focus {
+    background: white !important;
+    font-style: normal;
+    border-left: 4px solid #28a745 !important;
+}
+
+.recognized-field:focus::before {
+    display: none;
+}
+
+.needs-recognition {
+    background: #fff3cd !important;
+    border-left: 3px solid #ffc107 !important;
+}
+
+/* === ALBUM RECOGNITION FIELDS === */
+.album-recognized-field {
+    background: linear-gradient(90deg, #cce5ff 0%, #f8f9fa 100%) !important;
+    font-style: italic;
+    border-left: 4px solid #007bff !important;
+    color: #004085;
+    position: relative;
+}
+
+.album-recognized-field::before {
+    content: "💿";
+    position: absolute;
+    right: 3px;
+    top: 2px;
+    font-size: 0.7rem;
+    opacity: 0.7;
+}
+
+.album-recognized-field:focus {
+    background: white !important;
+    font-style: normal;
+    border-left: 4px solid #007bff !important;
+}
+
+.album-recognized-field:focus::before {
+    display: none;
+}
+
+/* === ALBUM SELECTION MODAL === */
+.album-modal {
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0,0,0,0.7);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.album-modal-content {
+    background-color: white;
+    border-radius: 10px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+    max-width: 800px;
+    width: 90%;
+    max-height: 80vh;
+    overflow-y: auto;
+}
+
+.album-modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px;
+    border-bottom: 1px solid #eee;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border-radius: 10px 10px 0 0;
+}
+
+.album-modal-header h3 {
+    margin: 0;
+    font-size: 1.4rem;
+}
+
+.album-modal-close {
+    font-size: 2rem;
+    font-weight: bold;
+    cursor: pointer;
+    opacity: 0.8;
+    transition: opacity 0.2s;
+}
+
+.album-modal-close:hover {
+    opacity: 1;
+}
+
+.album-modal-body {
+    padding: 20px;
+}
+
+.album-candidates {
+    margin: 20px 0;
+}
+
+.album-candidate {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 15px;
+    margin: 10px 0;
+    border: 2px solid #e0e0e0;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    background: linear-gradient(135deg, #fafafa 0%, #f0f0f0 100%);
+}
+
+.album-candidate:hover {
+    border-color: #007bff;
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(0,123,255,0.2);
+}
+
+.album-candidate.high-confidence {
+    border-color: #28a745;
+    background: linear-gradient(135deg, #d4edda 0%, #f8f9fa 100%);
+}
+
+.album-candidate.medium-confidence {
+    border-color: #ffc107;
+    background: linear-gradient(135deg, #fff3cd 0%, #f8f9fa 100%);
+}
+
+.album-candidate.low-confidence {
+    border-color: #dc3545;
+    background: linear-gradient(135deg, #f8d7da 0%, #f8f9fa 100%);
+}
+
+.album-info {
+    flex-grow: 1;
+}
+
+.album-title {
+    font-size: 1.2rem;
+    font-weight: bold;
+    color: #333;
+    margin-bottom: 3px;
+}
+
+.album-artist-main {
+    font-size: 1.05rem;
+    font-weight: 600;
+    color: #007bff;
+    margin-bottom: 8px;
+    font-style: italic;
+}
+
+.album-meta {
+    display: flex;
+    gap: 15px;
+    align-items: center;
+    margin-bottom: 5px;
+    color: #666;
+    font-size: 0.9rem;
+}
+
+.album-year {
+    color: #28a745;
+    font-weight: 500;
+    background: #e8f5e8;
+    padding: 2px 6px;
+    border-radius: 8px;
+    font-size: 0.8rem;
+}
+
+.album-tracks {
+    background: #e9ecef;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 0.8rem;
+    font-weight: 500;
+}
+
+.album-source {
+    color: #6c757d;
+    font-style: italic;
+    font-size: 0.8rem;
+}
+
+.album-confidence {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-width: 80px;
+}
+
+.confidence-bar {
+    width: 60px;
+    height: 8px;
+    background: #e0e0e0;
+    border-radius: 4px;
+    overflow: hidden;
+    margin-bottom: 5px;
+}
+
+.confidence-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #dc3545 0%, #ffc107 50%, #28a745 100%);
+    transition: width 0.3s ease;
+}
+
+.confidence-text {
+    font-size: 0.9rem;
+    font-weight: bold;
+}
+
+.album-actions {
+    text-align: center;
+    padding-top: 20px;
+    border-top: 1px solid #eee;
+}
+
+/* === INTERACTIVE CONTROLS === */
 .play-btn {
     background: #27ae60;
     color: white;
@@ -491,7 +731,7 @@ button:hover {
     background: #d35400;
 }
 
-/* === COVER STATUS === */
+/* === COVER STATUS INDICATORS === */
 .cover-status {
     font-size: 0.65rem;
     padding: 2px 6px;
@@ -513,7 +753,7 @@ button:hover {
     color: #721c24;
 }
 
-/* === HOVER TOOLTIP === */
+/* === HOVER TOOLTIP SYSTEM === */
 .mp3-tooltip {
     position: absolute;
     background: #ffffff;
@@ -538,7 +778,7 @@ button:hover {
     transform: translateY(0);
 }
 
-/* Hauptcontainer - zweispaltig */
+/* Tooltip Layout - Zweispaltig */
 .tooltip-main-container {
     display: flex;
     gap: 20px;
@@ -560,7 +800,7 @@ button:hover {
     gap: 8px;
 }
 
-/* Sektionen */
+/* Tooltip Content Elements */
 .tooltip-section {
     margin-bottom: 0;
 }
@@ -593,7 +833,7 @@ button:hover {
     word-break: break-word;
 }
 
-/* Cover */
+/* Tooltip Cover Display */
 .tooltip-cover {
     text-align: center;
     margin-bottom: 8px;
@@ -607,7 +847,7 @@ button:hover {
     border: 1px solid #bdc3c7;
 }
 
-/* Status-Anzeigen */
+/* Tooltip Status Messages */
 .tooltip-error {
     color: #e74c3c;
     font-style: italic;
@@ -621,83 +861,10 @@ button:hover {
     font-weight: 400;
 }
 
+/* === ANIMATIONS === */
 @keyframes tooltipFadeIn {
     from { opacity: 0; transform: translateY(-5px); }
     to { opacity: 1; transform: translateY(0); }
-}
-
-.tooltip-section {
-    margin-bottom: 8px;
-}
-
-.tooltip-section:last-child {
-    margin-bottom: 0;
-}
-
-.tooltip-header {
-    font-weight: 700;
-    color: #2c3e50;
-    margin-bottom: 6px;
-    padding-bottom: 3px;
-    border-bottom: 1px solid #bdc3c7;
-    font-size: 0.8rem;
-}
-
-.tooltip-content {
-    display: grid;
-    grid-template-columns: auto 1fr;
-    gap: 3px 8px;
-    align-items: start;
-}
-
-.tooltip-label {
-    color: #34495e;
-    font-weight: 600;
-    white-space: nowrap;
-}
-
-.tooltip-value {
-    color: #2c3e50;
-    font-weight: 500;
-    word-break: break-word;
-}
-
-.tooltip-cover {
-    text-align: center;
-    margin-top: 8px;
-}
-
-.tooltip-cover img {
-    max-width: 120px;
-    max-height: 120px;
-    border-radius: 6px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
-    border: 1px solid #ddd;
-}
-
-.tooltip-cover-info {
-    margin-top: 4px;
-    font-size: 0.65rem;
-    color: #34495e;
-    text-align: center;
-}
-
-.tooltip-error {
-    color: #e74c3c;
-    font-style: italic;
-    text-align: center;
-    font-weight: 600;
-}
-
-.tooltip-loading {
-    text-align: center;
-    color: #34495e;
-    font-weight: 500;
-}
-
-.tooltip-loading::after {
-    content: '';
-    animation: dots 1.5s steps(5, end) infinite;
 }
 
 @keyframes dots {
@@ -707,25 +874,7 @@ button:hover {
     80%, 100% { content: ''; }
 }
 
-/* Filename mit Hover-Cursor */
-.filename {
-    display: block;
-    font-weight: 600;
-    color: #2c3e50;
-    word-break: break-word;
-    line-height: 1.2;
-    font-size: 0.8rem;
-    cursor: help;
-    transition: color 0.2s ease;
-}
-
-.filename:hover {
-    color: #3498db;
-    text-decoration: underline;
-    background-color: rgba(52, 152, 219, 0.1);
-    padding: 2px 4px;
-    border-radius: 3px;
-}
+/* === RESPONSIVE DESIGN === */
 @media (max-width: 1200px) {
     .results-header,
     .controls-bar,
@@ -809,4 +958,93 @@ button:hover {
         padding: 10px 16px;
         font-size: 14px;
     }
+    
+    .save-progress-box {
+        min-width: 300px;
+        padding: 20px;
+    }
+}
+
+/* === TOAST NOTIFICATION SYSTEM === */
+.toast-container {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 10000;
+    pointer-events: none;
+}
+
+.toast {
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    margin-bottom: 10px;
+    max-width: 400px;
+    opacity: 0;
+    transform: translateX(100%);
+    transition: all 0.3s ease;
+    pointer-events: auto;
+}
+
+.toast.show {
+    opacity: 1;
+    transform: translateX(0);
+}
+
+.toast-content {
+    display: flex;
+    align-items: center;
+    padding: 12px 16px;
+    gap: 10px;
+}
+
+.toast-icon {
+    font-size: 1.2em;
+    flex-shrink: 0;
+}
+
+.toast-message {
+    color: #2c3e50;
+    font-size: 0.9em;
+    line-height: 1.4;
+    flex-grow: 1;
+}
+
+.toast-close {
+    background: none;
+    border: none;
+    color: #95a5a6;
+    cursor: pointer;
+    font-size: 1.2em;
+    font-weight: bold;
+    padding: 0;
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 3px;
+    transition: all 0.2s ease;
+}
+
+.toast-close:hover {
+    background: #ecf0f1;
+    color: #7f8c8d;
+}
+
+/* Toast-Typen */
+.toast-success {
+    border-left: 4px solid #27ae60;
+}
+
+.toast-error {
+    border-left: 4px solid #e74c3c;
+}
+
+.toast-warning {
+    border-left: 4px solid #f39c12;
+}
+
+.toast-info {
+    border-left: 4px solid #3498db;
 }

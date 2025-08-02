@@ -1,8 +1,25 @@
 """
-MP3 Metadaten-Verarbeitung für den MP3 Tagger.
+MP3 Metadaten-Verarbeitung für den MP3 Tagger Web Application
 
-Dieses Modul bietet Funktionen zum Lesen und Verarbeiten von MP3-Dateien
-und deren ID3-Tags, inklusive Audio-Erkennung für fehlende Metadaten.
+Dieses Modul stellt die Kernfunktionalität für die Verarbeitung von MP3-Dateien bereit:
+- MP3-Datei-Scanning und Metadaten-Extraktion
+- ID3-Tag-Management (Lesen, Schreiben, Validierung)
+- Cover-Art-Verarbeitung mit Größenanalyse
+- Audio-Erkennung-Integration (AcoustID, Shazam)
+- Album-Erkennung-Integration (MusicBrainz, Discogs)
+
+Hauptklassen:
+- MP3FileInfo: Datenklasse für MP3-Metadaten mit Recognition-Features
+- Utility-Funktionen für Batch-Verarbeitung und Dateisystem-Integration
+
+Verwendung:
+    from tagger.mp3_processor import scan_directory, save_mp3_tags
+    
+    # Verzeichnis scannen
+    files = scan_directory('/path/to/mp3s')
+    
+    # Tags speichern
+    results = save_mp3_tags(files_data)
 """
 
 import os
@@ -69,6 +86,12 @@ class MP3FileInfo:
         self.recognized_artist = None
         self.recognition_source = None
         self.needs_recognition = False
+        
+        # Album-Erkennungsergebnisse
+        self.album_recognized = False
+        self.recognized_album = None
+        self.recognized_year = None
+        self.recognized_track_number = None
         
         self._load_file_info()
         self._load_id3_tags()
@@ -215,6 +238,32 @@ class MP3FileInfo:
             'album': self.album,
             'cover_status': self.cover_status
         }
+    
+    @property
+    def full_path(self):
+        """Vollständiger Pfad zur Datei."""
+        return self.file_path
+    
+    @property 
+    def display_album(self):
+        """Album für Anzeige (erkannt oder original)."""
+        if self.album_recognized and self.recognized_album:
+            return self.recognized_album
+        return self.album
+    
+    @property
+    def display_year(self):
+        """Jahr für Anzeige (erkannt oder original).""" 
+        if self.album_recognized and self.recognized_year:
+            return self.recognized_year
+        return getattr(self, 'year', '')
+    
+    @property
+    def display_track_number(self):
+        """Track-Nummer für Anzeige (erkannt oder original)."""
+        if self.album_recognized and self.recognized_track_number:
+            return self.recognized_track_number
+        return self.track_number
 
 
 def scan_mp3_directory(root_directory: str) -> Dict[str, List[MP3FileInfo]]:

@@ -17,6 +17,7 @@ from tagger.mp3_processor import (
 )
 from tagger.utils import has_mp3_files, count_mp3_files_in_directory, is_mp3_file, get_detailed_mp3_info, save_mp3_tags
 from tagger.audio_recognition import create_recognition_service, AudioRecognitionBatch
+from tagger.album_recognition import create_album_recognition_service
 
 app = Flask(__name__)
 
@@ -446,6 +447,189 @@ def recognition_status(mp3_dir):
         return jsonify({
             'success': False,
             'message': f'Fehler beim Laden des Recognition-Status: {str(e)}'
+        })
+
+
+@app.route('/api/album-recognition', methods=['POST'])
+def album_recognition():
+    """API-Endpoint für Album-Erkennung"""
+    try:
+        data = request.get_json()
+        if not data or 'directory' not in data:
+            return jsonify({
+                'success': False,
+                'message': 'Verzeichnis-Parameter fehlt'
+            })
+        
+        directory = data['directory']
+        selected_files = data.get('selected_files', [])
+        
+        print(f"Album-Erkennung für Verzeichnis: {directory}")
+        print(f"Ausgewählte Dateien: {len(selected_files)}")
+        
+        if not os.path.exists(directory):
+            return jsonify({
+                'success': False,
+                'message': 'Verzeichnis nicht gefunden'
+            })
+        
+        # MP3-Dateien scannen
+        grouped_files = scan_mp3_directory(directory)
+        all_files = []
+        for group_files in grouped_files.values():
+            all_files.extend(group_files)
+        
+        # Nur ausgewählte Dateien verwenden, falls angegeben
+        if selected_files:
+            all_files = [f for f in all_files if f.full_path in selected_files]
+        
+        if not all_files:
+            return jsonify({
+                'success': False,
+                'message': 'Keine MP3-Dateien zur Album-Erkennung gefunden'
+            })
+        
+        # Album-Erkennung durchführen
+        recognition_service = create_album_recognition_service()
+        
+        # Datei-Informationen für die Erkennung vorbereiten
+        files_info = []
+        for mp3_file in all_files:
+            files_info.append({
+                'title': mp3_file.title or '',
+                'artist': mp3_file.artist or '',
+                'filename': mp3_file.filename,
+                'full_path': mp3_file.full_path
+            })
+        
+        # Asynchrone Album-Erkennung
+        async def recognize_album_async():
+            return await recognition_service.recognize_album(files_info)
+        
+        candidates, max_confidence = asyncio.run(recognize_album_async())
+        
+        print(f"Album-Erkennung abgeschlossen: {len(candidates)} Kandidaten, Konfidenz: {max_confidence}")
+        
+        # Ergebnis formatieren
+        candidates_data = []
+        for candidate in candidates:
+            print(f"DEBUG: Kandidat - Titel: '{candidate.title}', Artist: '{candidate.artist}', Jahr: '{candidate.year}'")
+            candidates_data.append({
+                'title': candidate.title,
+                'artist': candidate.artist or 'Unbekannter Künstler',  # Fallback für leere Artists
+                'year': candidate.year,
+                'track_count': candidate.track_count,
+                'confidence': candidate.confidence,
+                'source': candidate.source,
+                'external_id': candidate.external_id,
+                'tracks': candidate.tracks
+            })
+        
+        return jsonify({
+            'success': True,
+            'candidates': candidates_data,
+            'max_confidence': max_confidence,
+            'auto_apply': max_confidence >= 0.9,  # Auto-Anwenden bei hoher Konfidenz
+            'message': f'{len(candidates)} Album-Kandidaten gefunden'
+        })
+        
+    except Exception as e:
+        print(f"Fehler bei Album-Erkennung: {e}")
+        return jsonify({
+            'success': False,
+            'message': f'Album-Erkennung fehlgeschlagen: {str(e)}'
+        })
+
+
+@app.route('/api/apply-album', methods=['POST'])
+def apply_album():
+    """API-Endpoint zum Anwenden der Album-Daten"""
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({
+                'success': False,
+                'message': 'Keine Daten empfangen'
+            })
+        
+        directory = data.get('directory')
+        selected_files = data.get('selected_files', [])
+        album_data = data.get('album_data')
+        
+        if not all([directory, album_data]):
+            return jsonify({
+                'success': False,
+                'message': 'Verzeichnis oder Album-Daten fehlen'
+            })
+        
+        print(f"Album-Daten anwenden für Verzeichnis: {directory}")
+        
+        # MP3-Dateien scannen
+        grouped_files = scan_mp3_directory(directory)
+        all_files = []
+        for group_files in grouped_files.values():
+            all_files.extend(group_files)
+        
+        # Nur ausgewählte Dateien verwenden, falls angegeben
+        if selected_files:
+            all_files = [f for f in all_files if f.full_path in selected_files]
+        
+        # Album-Daten auf Dateien anwenden
+        applied_files = []
+        album_tracks = album_data.get('tracks', [])
+        
+        for mp3_file in all_files:
+            # Passenden Track im Album finden
+            best_match = None
+            best_score = 0
+            
+            current_title = (mp3_file.title or '').lower().strip()
+            
+            for track in album_tracks:
+                track_title = track.get('title', '').lower().strip()
+                
+                if current_title and track_title:
+                    # Exakte Übereinstimmung
+                    if current_title == track_title:
+                        best_match = track
+                        best_score = 1.0
+                        break
+                    # Ähnlichkeits-Matching
+                    elif current_title in track_title or track_title in current_title:
+                        score = 0.8
+                        if score > best_score:
+                            best_match = track
+                            best_score = score
+            
+            if best_match:
+                # Album-Daten anwenden
+                mp3_file.album = album_data.get('title', '')
+                mp3_file.year = album_data.get('year', '')
+                mp3_file.track_number = str(best_match.get('number', ''))
+                
+                # Als erkannt markieren
+                mp3_file.album_recognized = True
+                
+                applied_files.append({
+                    'filename': mp3_file.filename,
+                    'album': mp3_file.album,
+                    'year': mp3_file.year,
+                    'track_number': mp3_file.track_number
+                })
+        
+        print(f"Album-Daten auf {len(applied_files)} Dateien angewendet")
+        
+        return jsonify({
+            'success': True,
+            'applied_files': applied_files,
+            'message': f'Album-Daten auf {len(applied_files)} Dateien angewendet'
+        })
+        
+    except Exception as e:
+        print(f"Fehler beim Anwenden der Album-Daten: {e}")
+        return jsonify({
+            'success': False,
+            'message': f'Fehler beim Anwenden der Album-Daten: {str(e)}'
         })
 
 

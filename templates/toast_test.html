@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Toast Notification Test</title>
+    <link rel="stylesheet" href="/static/styles.css">
+    <style>
+        .test-container {
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .test-button {
+            margin: 10px;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .btn-success { background: #27ae60; color: white; }
+        .btn-error { background: #e74c3c; color: white; }
+        .btn-warning { background: #f39c12; color: white; }
+        .btn-info { background: #3498db; color: white; }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <h1>Toast Notification Test</h1>
+        <p>Klicken Sie auf die Buttons, um die neuen Auto-Close-Popups zu testen:</p>
+        
+        <button class="test-button btn-success" onclick="showUserMessage('Operation erfolgreich abgeschlossen!', 'success')">
+            ✅ Erfolg-Meldung
+        </button>
+        
+        <button class="test-button btn-error" onclick="showUserMessage('Ein Fehler ist aufgetreten!', 'error')">
+            ❌ Fehler-Meldung
+        </button>
+        
+        <button class="test-button btn-warning" onclick="showUserMessage('Bitte beachten Sie diese Warnung!', 'warning')">
+            ⚠️ Warnung-Meldung
+        </button>
+        
+        <button class="test-button btn-info" onclick="showUserMessage('Hier ist eine Information für Sie.', 'info')">
+            ℹ️ Info-Meldung
+        </button>
+        
+        <button class="test-button" onclick="testMultipleMessages()" style="background: #9b59b6; color: white;">
+            🎯 Mehrere Meldungen testen
+        </button>
+        
+        <br><br>
+        <a href="/" style="color: #3498db; text-decoration: none;">← Zurück zur Hauptseite</a>
+    </div>
+
+    <script src="/static/utils.js"></script>
+    <script>
+        function testMultipleMessages() {
+            showUserMessage('Erste Meldung', 'info', 2000);
+            setTimeout(() => showUserMessage('Zweite Meldung', 'success', 2000), 500);
+            setTimeout(() => showUserMessage('Dritte Meldung', 'warning', 2000), 1000);
+            setTimeout(() => showUserMessage('Letzte Meldung', 'error', 2000), 1500);
+        }
+    </script>
+</body>
+</html>

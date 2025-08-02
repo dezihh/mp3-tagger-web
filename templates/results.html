@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MP3 Tagger Web - Ergebnisse</title>
-    <link rel="stylesheet" href="/static/styles_optimized.css">
+    <link rel="stylesheet" href="/static/styles.css">
 </head>
 <body>
     <div class="results-header">
@@ -31,6 +31,9 @@
             </button>
             <button id="audioRecognitionBtn" class="btn btn-secondary" title="Audio-Erkennung für fehlende Tags">
                 🎵 Audio-Erkennung
+            </button>
+            <button id="albumRecognitionBtn" class="btn btn-info" title="Album-Erkennung für bessere Metadaten">
+                💿 Album-Erkennung
             </button>
             <button id="batchSaveBtn" class="btn btn-success" disabled>
                 <span id="saveCount">0</span> Dateien speichern
@@ -108,8 +111,11 @@
                                        {{ 'title="Erkannt via ' + file.recognition_source + '"' if is_recognized else '' }}>
                             </td>
                             <td class="col-album">
-                                <input type="text" class="album-input" value="{{ file.album }}" 
-                                       data-original="{{ file.album }}">
+                                <input type="text" class="album-input {{ 'album-recognized-field' if file.album_recognized else '' }}" 
+                                       value="{{ file.display_album }}" 
+                                       data-original="{{ file.album }}"
+                                       data-recognized="{{ file.recognized_album if file.recognized_album else '' }}"
+                                       {{ 'title="Erkannt als Album-Metadaten"' if file.album_recognized else '' }}>
                             </td>
                             <td class="col-cover">
                                 <span class="cover-status {{ 'has-cover' if file.cover_status != 'Nein' else 'no-cover' }}" 
@@ -143,6 +149,9 @@
 
     <audio id="audio-player" style="display: none;" controls></audio>
 
+    <!-- Include reusable JavaScript utilities -->
+    <script src="{{ url_for('static', filename='utils.js') }}"></script>
+
     <script>
         /* ==========================================
            MP3 TAGGER WEB - OPTIMIZED JAVASCRIPT
@@ -163,6 +172,7 @@
             initializeTooltips();
             initializeSaveFunction();
             initializeAudioRecognition();
+            initializeAlbumRecognition();
             updateBatchButton();
         });
 
@@ -320,7 +330,7 @@
                 currentPlayButton = button;
             }).catch(error => {
                 console.error('Fehler beim Abspielen:', error);
-                alert('Fehler beim Abspielen der Datei: ' + error.message);
+                showUserMessage('Fehler beim Abspielen der Datei: ' + error.message, 'error');
             });
             
             // Event-Listener für Track-Ende (nur einmal hinzufügen)
@@ -375,10 +385,9 @@
             tooltipElement.classList.add('show');
             updateTooltipPosition(event);
 
-            // MP3-Informationen via API laden
+            // MP3-Informationen via API laden mit optimierter makeApiCall
             const encodedPath = encodeURIComponent(filepath);
-            fetch(`/api/mp3-info?filepath=${encodedPath}`)
-                .then(response => response.json())
+            makeApiCall(`/api/mp3-info?filepath=${encodedPath}`)
                 .then(data => {
                     if (tooltipElement.classList.contains('show')) {
                         renderTooltipContent(data);
@@ -513,7 +522,7 @@
             const filesToSave = collectFilesToSave();
             
             if (filesToSave.length === 0) {
-                alert('Keine Dateien zum Speichern ausgewählt.');
+                showUserMessage('Keine Dateien zum Speichern ausgewählt.', 'warning');
                 return;
             }
 
@@ -548,51 +557,48 @@
             return filesToSave;
         }
 
+        /* === SAVE PROGRESS CONTROLLER ===
+         * Nutzt die wiederverwendbare createUniversalProgressController Funktion
+         */
         function createProgressController() {
             const saveBtn = document.getElementById('batchSaveBtn');
-            const overlay = document.getElementById('saveProgressOverlay');
-            const progressFill = document.getElementById('saveProgressFill');
-            const progressText = document.getElementById('saveProgressText');
-            const progressStatus = document.getElementById('saveProgressStatus');
+            const controller = createUniversalProgressController({
+                title: '💾 Tags werden gespeichert...'
+            });
             
             return {
-                show: () => {
+                show: (title) => {
                     saveBtn.disabled = true;
-                    overlay.classList.add('show');
-                    progressFill.style.width = '0%';
-                    progressText.textContent = 'Sammle Datei-Informationen...';
-                    progressStatus.textContent = '';
+                    controller.show(title);
+                    controller.updateProgress(0, 'Sammle Datei-Informationen...');
                 },
                 
-                updateProgress: (percent, text, status = '') => {
-                    progressFill.style.width = `${percent}%`;
-                    progressText.textContent = text;
-                    if (status) progressStatus.textContent = status;
-                },
+                updateProgress: controller.updateProgress,
                 
                 hide: () => {
-                    overlay.classList.remove('show');
+                    controller.hide();
                     saveBtn.disabled = false;
-                    // Status-Farbe zurücksetzen
-                    setTimeout(() => {
-                        progressStatus.style.color = '#27ae60';
-                    }, 300);
                 }
             };
         }
 
-        function performSaveRequest(filesToSave, progressController) {
-            fetch('/api/save-tags', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ files: filesToSave })
-            })
-            .then(response => {
+        /* === SAVE REQUEST OPTIMIERT ===
+         * Nutzt makeApiCall für saubere API-Kommunikation
+         */
+        async function performSaveRequest(filesToSave, progressController) {
+            try {
+                progressController.updateProgress(25, 'Sende Daten an Server...');
+                
+                const data = await makeApiCall('/api/save-tags', {
+                    method: 'POST',
+                    body: JSON.stringify({ files: filesToSave })
+                });
+                
                 progressController.updateProgress(75, 'Verarbeite Antwort...');
-                return response.json();
-            })
-            .then(data => handleSaveResponse(data, progressController))
-            .catch(error => handleSaveError(error, progressController));
+                handleSaveResponse(data, progressController);
+            } catch (error) {
+                handleSaveError(error, progressController);
+            }
         }
 
         function handleSaveResponse(data, progressController) {
@@ -611,11 +617,13 @@
             setTimeout(() => progressController.hide(), 2000);
         }
 
+        /* === ERROR HANDLERS OPTIMIERT ===
+         * Nutzt wiederverwendbare Error-Handling-Funktionen
+         */
         function handleSaveError(error, progressController) {
-            console.error('Fehler beim Speichern:', error);
+            handleApiError(error, 'Speichern der Tags');
             progressController.updateProgress(100, '', '❌ Fehler beim Speichern der Tags');
             document.getElementById('saveProgressStatus').style.color = '#e74c3c';
-            
             setTimeout(() => progressController.hide(), 3000);
         }
 
@@ -650,14 +658,13 @@
             // Progress-System für Audio-Erkennung
             const progressController = createRecognitionProgressController();
             progressController.show();
+            progressController.updateProgress(0, 'Scanne Dateien nach fehlenden Tags...');
             
-            // API-Request für Batch-Audio-Erkennung
-            fetch('/api/batch-audio-recognition', {
+            // API-Request für Batch-Audio-Erkennung mit optimierter makeApiCall
+            makeApiCall('/api/batch-audio-recognition', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ mp3_dir: mp3Dir })
             })
-            .then(response => response.json())
             .then(data => handleRecognitionResponse(data, progressController))
             .catch(error => handleRecognitionError(error, progressController))
             .finally(() => {
@@ -666,38 +673,13 @@
             });
         }
 
+        /* === AUDIO RECOGNITION PROGRESS CONTROLLER ===
+         * Nutzt die wiederverwendbare createUniversalProgressController Funktion
+         */
         function createRecognitionProgressController() {
-            // Wiederverwendung des Progress-Overlay-Systems
-            const overlay = document.getElementById('saveProgressOverlay');
-            const progressFill = document.getElementById('saveProgressFill');
-            const progressText = document.getElementById('saveProgressText');
-            const progressStatus = document.getElementById('saveProgressStatus');
-            const progressTitle = document.querySelector('.save-progress-title');
-            
-            return {
-                show: () => {
-                    progressTitle.innerHTML = '🎵 Audio-Erkennung läuft...';
-                    overlay.classList.add('show');
-                    progressFill.style.width = '0%';
-                    progressText.textContent = 'Scanne Dateien nach fehlenden Tags...';
-                    progressStatus.textContent = '';
-                },
-                
-                updateProgress: (percent, text, status = '') => {
-                    progressFill.style.width = `${percent}%`;
-                    progressText.textContent = text;
-                    if (status) progressStatus.textContent = status;
-                },
-                
-                hide: () => {
-                    overlay.classList.remove('show');
-                    // Titel zurücksetzen
-                    setTimeout(() => {
-                        progressTitle.innerHTML = '💾 Tags werden gespeichert...';
-                        progressStatus.style.color = '#27ae60';
-                    }, 300);
-                }
-            };
+            return createUniversalProgressController({
+                title: '🎵 Audio-Erkennung läuft...'
+            });
         }
 
         function handleRecognitionResponse(data, progressController) {
@@ -725,31 +707,28 @@
             }
         }
 
+        /* === UPDATE RECOGNIZED FIELDS - OPTIMIERT ===
+         * Nutzt die wiederverwendbaren updateRecognizedField Funktionen
+         */
         function updateRecognizedFields(recognitionData) {
             // Durch alle erkannten Dateien iterieren
             Object.entries(recognitionData).forEach(([filepath, data]) => {
-                const row = document.querySelector(`[data-filepath="${filepath}"]`);
+                const row = findRowByFilepath(filepath);
                 if (row) {
-                    // Titel-Feld aktualisieren
+                    // Titel-Feld aktualisieren mit utils-Funktion
                     if (data.title) {
                         const titleInput = row.querySelector('.title-input');
                         if (titleInput && !titleInput.value.trim()) {
-                            titleInput.value = data.title;
-                            titleInput.classList.add('recognized-field');
-                            titleInput.setAttribute('data-recognized', data.title);
-                            titleInput.setAttribute('title', `Erkannt via ${data.source}`);
+                            updateRecognizedField(row, '.title-input', data.title, data.source, 'audio');
                             titleInput.style.fontStyle = 'italic';
                         }
                     }
                     
-                    // Artist-Feld aktualisieren
+                    // Artist-Feld aktualisieren mit utils-Funktion
                     if (data.artist) {
                         const artistInput = row.querySelector('.artist-input');
                         if (artistInput && !artistInput.value.trim()) {
-                            artistInput.value = data.artist;
-                            artistInput.classList.add('recognized-field');
-                            artistInput.setAttribute('data-recognized', data.artist);
-                            artistInput.setAttribute('title', `Erkannt via ${data.source}`);
+                            updateRecognizedField(row, '.artist-input', data.artist, data.source, 'audio');
                             artistInput.style.fontStyle = 'italic';
                         }
                     }
@@ -760,10 +739,228 @@
         }
 
         function handleRecognitionError(error, progressController) {
-            console.error('Fehler bei Audio-Erkennung:', error);
+            handleApiError(error, 'Audio-Erkennung');
             progressController.updateProgress(100, '', '❌ Fehler bei der Audio-Erkennung');
             document.getElementById('saveProgressStatus').style.color = '#e74c3c';
+            setTimeout(() => progressController.hide(), 3000);
+        }
+
+        /* === ALBUM RECOGNITION SYSTEM ===
+         * Album-Erkennung mit MusicBrainz und Discogs mit Auswahl-Dialog
+         */
+        function initializeAlbumRecognition() {
+            const albumBtn = document.getElementById('albumRecognitionBtn');
+            if (albumBtn) {
+                albumBtn.addEventListener('click', performAlbumRecognition);
+            }
+        }
+
+        function performAlbumRecognition() {
+            const albumBtn = document.getElementById('albumRecognitionBtn');
+            const mp3Dir = '{{ mp3_dir }}'; // Aus Template-Context
             
+            // Nur ausgewählte Dateien für Album-Erkennung
+            const selectedFilePaths = Array.from(selectedFiles);
+            if (selectedFilePaths.length === 0) {
+                showUserMessage('Bitte wählen Sie mindestens eine Datei für die Album-Erkennung aus.', 'warning');
+                return;
+            }
+            
+            // Button deaktivieren
+            albumBtn.disabled = true;
+            albumBtn.innerHTML = '🔍 Erkenne Album...';
+            
+            // Progress-System für Album-Erkennung
+            const progressController = createAlbumProgressController();
+            progressController.show();
+            progressController.updateProgress(0, 'Analysiere Dateien für Album-Erkennung...');
+            
+            // API-Request für Album-Erkennung mit optimierter makeApiCall
+            makeApiCall('/api/album-recognition', {
+                method: 'POST',
+                body: JSON.stringify({ 
+                    directory: mp3Dir,
+                    selected_files: selectedFilePaths
+                })
+            })
+            .then(data => handleAlbumRecognitionResponse(data, progressController))
+            .catch(error => handleAlbumRecognitionError(error, progressController))
+            .finally(() => {
+                albumBtn.disabled = false;
+                albumBtn.innerHTML = '💿 Album-Erkennung';
+            });
+        }
+
+        /* === ALBUM RECOGNITION PROGRESS CONTROLLER ===
+         * Nutzt die wiederverwendbare createUniversalProgressController Funktion
+         */
+        function createAlbumProgressController() {
+            return createUniversalProgressController({
+                title: '� Album-Erkennung läuft...'
+            });
+        }
+
+        function handleAlbumRecognitionResponse(data, progressController) {
+            progressController.hide();
+            
+            if (data.success) {
+                const candidates = data.candidates;
+                
+                if (candidates.length === 0) {
+                    showUserMessage('Kein Album gefunden. Versuchen Sie es mit anderen Dateien oder prüfen Sie die Metadaten.', 'info');
+                    return;
+                }
+                
+                // Bei hoher Konfidenz automatisch anwenden
+                if (data.auto_apply && candidates.length > 0) {
+                    const bestCandidate = candidates[0];
+                    applyAlbumData(bestCandidate);
+                    showUserMessage(`Album automatisch erkannt: "${bestCandidate.title}" von ${bestCandidate.artist} (${Math.round(bestCandidate.confidence * 100)}% Konfidenz)`, 'success', 6000);
+                } else {
+                    // Auswahl-Dialog anzeigen
+                    showAlbumSelectionDialog(candidates);
+                }
+            } else {
+                showUserMessage(`Album-Erkennung fehlgeschlagen: ${data.message}`, 'error');
+            }
+        }
+
+        function showAlbumSelectionDialog(candidates) {
+            // Dialog-HTML erstellen
+            let dialogHtml = `
+                <div id="albumSelectionModal" class="album-modal">
+                    <div class="album-modal-content">
+                        <div class="album-modal-header">
+                            <h3>💿 Album-Auswahl</h3>
+                            <span class="album-modal-close" onclick="closeAlbumDialog()">&times;</span>
+                        </div>
+                        <div class="album-modal-body">
+                            <p>Mehrere mögliche Alben gefunden. Bitte wählen Sie das richtige Album aus:</p>
+                            <div class="album-candidates">
+            `;
+            
+            candidates.forEach((candidate, index) => {
+                const confidencePercent = Math.round(candidate.confidence * 100);
+                const confidenceClass = confidencePercent >= 80 ? 'high-confidence' : 
+                                      confidencePercent >= 60 ? 'medium-confidence' : 'low-confidence';
+                
+                const artistDisplay = candidate.artist && candidate.artist.trim() ? candidate.artist : 'Unbekannter Künstler';
+                
+                dialogHtml += `
+                    <div class="album-candidate ${confidenceClass}" onclick="selectAlbumCandidate(${index})">
+                        <div class="album-info">
+                            <div class="album-title">${candidate.title}</div>
+                            <div class="album-artist-main">von ${artistDisplay}</div>
+                            <div class="album-meta">
+                                ${candidate.year ? `<span class="album-year">${candidate.year}</span>` : ''}
+                                <span class="album-tracks">${candidate.track_count} Tracks</span>
+                                <span class="album-source">via ${candidate.source}</span>
+                            </div>
+                        </div>
+                        <div class="album-confidence">
+                            <span class="confidence-bar">
+                                <span class="confidence-fill" style="width: ${confidencePercent}%"></span>
+                            </span>
+                            <span class="confidence-text">${confidencePercent}%</span>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            dialogHtml += `
+                            </div>
+                            <div class="album-actions">
+                                <button class="btn btn-secondary" onclick="closeAlbumDialog()">Keiner von denen</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            // Dialog in DOM einfügen
+            document.body.insertAdjacentHTML('beforeend', dialogHtml);
+            
+            // Kandidaten-Daten für später speichern
+            window.albumCandidates = candidates;
+        }
+
+        function selectAlbumCandidate(index) {
+            const candidate = window.albumCandidates[index];
+            applyAlbumData(candidate);
+            closeAlbumDialog();
+        }
+
+        /* === APPLY ALBUM DATA OPTIMIERT ===
+         * Nutzt makeApiCall für saubere API-Kommunikation
+         */
+        async function applyAlbumData(albumData) {
+            const mp3Dir = '{{ mp3_dir }}';
+            const selectedFilePaths = Array.from(selectedFiles);
+            
+            try {
+                // API-Request zum Anwenden der Album-Daten mit optimierter makeApiCall
+                const data = await makeApiCall('/api/apply-album', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        directory: mp3Dir,
+                        selected_files: selectedFilePaths,
+                        album_data: albumData
+                    })
+                });
+                
+                if (data.success) {
+                    // Album-Daten in die UI eintragen
+                    updateAlbumFields(data.applied_files, albumData);
+                    showUserMessage(`Album-Daten auf ${data.applied_files.length} Dateien angewendet!`, 'success');
+                } else {
+                    showUserMessage(`Fehler beim Anwenden der Album-Daten: ${data.message}`, 'error');
+                }
+            } catch (error) {
+                console.error('Fehler beim Anwenden der Album-Daten:', error);
+                showUserMessage('Fehler beim Anwenden der Album-Daten.', 'error');
+            }
+        }
+
+        /* === UPDATE ALBUM FIELDS - OPTIMIERT ===
+         * Nutzt die wiederverwendbaren updateRecognizedField Funktionen  
+         */
+        function updateAlbumFields(appliedFiles, albumData) {
+            appliedFiles.forEach(fileData => {
+                const row = findRowByFilepath(fileData.filename);
+                if (row) {
+                    // Album-Feld aktualisieren mit utils-Funktion
+                    if (fileData.album) {
+                        updateRecognizedField(row, '.album-input', fileData.album, albumData.source, 'album');
+                    }
+                    
+                    // Jahr-Feld aktualisieren mit utils-Funktion
+                    if (fileData.year) {
+                        updateRecognizedField(row, '.year-input', fileData.year, albumData.source, 'album');
+                    }
+                    
+                    // Track-Nummer aktualisieren mit formatierter utils-Funktion
+                    if (fileData.track_number) {
+                        const formattedTrack = formatTrackNumber(fileData.track_number, 2);
+                        updateRecognizedField(row, '.track-input', formattedTrack, albumData.source, 'album');
+                    }
+                }
+            });
+            
+            console.log(`💿 ${appliedFiles.length} Dateien mit Album-Daten aktualisiert`);
+        }
+
+        function closeAlbumDialog() {
+            const modal = document.getElementById('albumSelectionModal');
+            if (modal) {
+                modal.remove();
+            }
+            delete window.albumCandidates;
+        }
+
+        function handleAlbumRecognitionError(error, progressController) {
+            handleApiError(error, 'Album-Erkennung');
+            progressController.updateProgress(100, '', '❌ Fehler bei der Album-Erkennung');
+            document.getElementById('saveProgressStatus').style.color = '#e74c3c';
             setTimeout(() => progressController.hide(), 3000);
         }
     </script>
