@@ -463,6 +463,39 @@ button:hover {
     max-width: 40px;
 }
 
+/* === AUDIO RECOGNITION FIELDS === */
+.recognized-field {
+    background: linear-gradient(90deg, #d4edda 0%, #f8f9fa 100%) !important;
+    font-style: italic;
+    border-left: 4px solid #28a745 !important;
+    color: #155724;
+    position: relative;
+}
+
+.recognized-field::before {
+    content: "🎵";
+    position: absolute;
+    right: 3px;
+    top: 2px;
+    font-size: 0.7rem;
+    opacity: 0.7;
+}
+
+.recognized-field:focus {
+    background: white !important;
+    font-style: normal;
+    border-left: 4px solid #28a745 !important;
+}
+
+.recognized-field:focus::before {
+    display: none;
+}
+
+.needs-recognition {
+    background: #fff3cd !important;
+    border-left: 3px solid #ffc107 !important;
+}
+
 /* === INTERACTIVE CONTROLS === */
 .play-btn {
     background: #27ae60;

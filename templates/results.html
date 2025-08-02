@@ -29,6 +29,9 @@
             <button class="btn btn-primary" id="batch-process" disabled>
                 Ausgewählte verarbeiten (0)
             </button>
+            <button id="audioRecognitionBtn" class="btn btn-secondary" title="Audio-Erkennung für fehlende Tags">
+                🎵 Audio-Erkennung
+            </button>
             <button id="batchSaveBtn" class="btn btn-success" disabled>
                 <span id="saveCount">0</span> Dateien speichern
             </button>
@@ -89,12 +92,20 @@
                                        data-original="{{ file.track_number }}" maxlength="3">
                             </td>
                             <td class="col-title">
-                                <input type="text" class="title-input" value="{{ file.title }}" 
-                                       data-original="{{ file.title }}">
+                                {% set display_title, is_recognized = get_display_title_for_template(file) %}
+                                <input type="text" class="title-input {{ 'recognized-field' if is_recognized else '' }}" 
+                                       value="{{ display_title }}" 
+                                       data-original="{{ file.title }}"
+                                       data-recognized="{{ file.recognized_title if file.recognized_title else '' }}"
+                                       {{ 'title="Erkannt via ' + file.recognition_source + '"' if is_recognized else '' }}>
                             </td>
                             <td class="col-artist">
-                                <input type="text" class="artist-input" value="{{ file.artist }}" 
-                                       data-original="{{ file.artist }}">
+                                {% set display_artist, is_recognized = get_display_artist_for_template(file) %}
+                                <input type="text" class="artist-input {{ 'recognized-field' if is_recognized else '' }}" 
+                                       value="{{ display_artist }}" 
+                                       data-original="{{ file.artist }}"
+                                       data-recognized="{{ file.recognized_artist if file.recognized_artist else '' }}"
+                                       {{ 'title="Erkannt via ' + file.recognition_source + '"' if is_recognized else '' }}>
                             </td>
                             <td class="col-album">
                                 <input type="text" class="album-input" value="{{ file.album }}" 
@@ -151,6 +162,7 @@
             initializePlayback();
             initializeTooltips();
             initializeSaveFunction();
+            initializeAudioRecognition();
             updateBatchButton();
         });
 
@@ -615,6 +627,144 @@
             updateGlobalSelect();
             updateDirectorySelects();
             updateBatchButton();
+        }
+
+        /* === AUDIO RECOGNITION SYSTEM ===
+         * Batch-Audio-Erkennung für fehlende Titel und Künstler
+         */
+        function initializeAudioRecognition() {
+            const recognitionBtn = document.getElementById('audioRecognitionBtn');
+            if (recognitionBtn) {
+                recognitionBtn.addEventListener('click', performAudioRecognition);
+            }
+        }
+
+        function performAudioRecognition() {
+            const recognitionBtn = document.getElementById('audioRecognitionBtn');
+            const mp3Dir = '{{ mp3_dir }}'; // Aus Template-Context
+            
+            // Button deaktivieren
+            recognitionBtn.disabled = true;
+            recognitionBtn.innerHTML = '🔍 Erkenne Audio...';
+            
+            // Progress-System für Audio-Erkennung
+            const progressController = createRecognitionProgressController();
+            progressController.show();
+            
+            // API-Request für Batch-Audio-Erkennung
+            fetch('/api/batch-audio-recognition', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ mp3_dir: mp3Dir })
+            })
+            .then(response => response.json())
+            .then(data => handleRecognitionResponse(data, progressController))
+            .catch(error => handleRecognitionError(error, progressController))
+            .finally(() => {
+                recognitionBtn.disabled = false;
+                recognitionBtn.innerHTML = '🎵 Audio-Erkennung';
+            });
+        }
+
+        function createRecognitionProgressController() {
+            // Wiederverwendung des Progress-Overlay-Systems
+            const overlay = document.getElementById('saveProgressOverlay');
+            const progressFill = document.getElementById('saveProgressFill');
+            const progressText = document.getElementById('saveProgressText');
+            const progressStatus = document.getElementById('saveProgressStatus');
+            const progressTitle = document.querySelector('.save-progress-title');
+            
+            return {
+                show: () => {
+                    progressTitle.innerHTML = '🎵 Audio-Erkennung läuft...';
+                    overlay.classList.add('show');
+                    progressFill.style.width = '0%';
+                    progressText.textContent = 'Scanne Dateien nach fehlenden Tags...';
+                    progressStatus.textContent = '';
+                },
+                
+                updateProgress: (percent, text, status = '') => {
+                    progressFill.style.width = `${percent}%`;
+                    progressText.textContent = text;
+                    if (status) progressStatus.textContent = status;
+                },
+                
+                hide: () => {
+                    overlay.classList.remove('show');
+                    // Titel zurücksetzen
+                    setTimeout(() => {
+                        progressTitle.innerHTML = '💾 Tags werden gespeichert...';
+                        progressStatus.style.color = '#27ae60';
+                    }, 300);
+                }
+            };
+        }
+
+        function handleRecognitionResponse(data, progressController) {
+            progressController.updateProgress(100, '');
+            
+            if (data.success) {
+                const stats = data.stats;
+                const statusText = `✅ ${stats.successful} von ${stats.total} Dateien erfolgreich erkannt!`;
+                progressController.updateProgress(100, '', statusText);
+                
+                // Erkannte Daten direkt in die Felder einsetzen
+                if (data.recognition_data) {
+                    updateRecognizedFields(data.recognition_data);
+                }
+                
+                // Kurz warten, dann Progress ausblenden
+                setTimeout(() => {
+                    progressController.hide();
+                }, 2000);
+            } else {
+                progressController.updateProgress(100, '', `❌ ${data.message}`);
+                document.getElementById('saveProgressStatus').style.color = '#e74c3c';
+                
+                setTimeout(() => progressController.hide(), 3000);
+            }
+        }
+
+        function updateRecognizedFields(recognitionData) {
+            // Durch alle erkannten Dateien iterieren
+            Object.entries(recognitionData).forEach(([filepath, data]) => {
+                const row = document.querySelector(`[data-filepath="${filepath}"]`);
+                if (row) {
+                    // Titel-Feld aktualisieren
+                    if (data.title) {
+                        const titleInput = row.querySelector('.title-input');
+                        if (titleInput && !titleInput.value.trim()) {
+                            titleInput.value = data.title;
+                            titleInput.classList.add('recognized-field');
+                            titleInput.setAttribute('data-recognized', data.title);
+                            titleInput.setAttribute('title', `Erkannt via ${data.source}`);
+                            titleInput.style.fontStyle = 'italic';
+                        }
+                    }
+                    
+                    // Artist-Feld aktualisieren
+                    if (data.artist) {
+                        const artistInput = row.querySelector('.artist-input');
+                        if (artistInput && !artistInput.value.trim()) {
+                            artistInput.value = data.artist;
+                            artistInput.classList.add('recognized-field');
+                            artistInput.setAttribute('data-recognized', data.artist);
+                            artistInput.setAttribute('title', `Erkannt via ${data.source}`);
+                            artistInput.style.fontStyle = 'italic';
+                        }
+                    }
+                }
+            });
+            
+            console.log(`🎵 ${Object.keys(recognitionData).length} Felder mit erkannten Daten aktualisiert`);
+        }
+
+        function handleRecognitionError(error, progressController) {
+            console.error('Fehler bei Audio-Erkennung:', error);
+            progressController.updateProgress(100, '', '❌ Fehler bei der Audio-Erkennung');
+            document.getElementById('saveProgressStatus').style.color = '#e74c3c';
+            
+            setTimeout(() => progressController.hide(), 3000);
         }
     </script>
 </body>

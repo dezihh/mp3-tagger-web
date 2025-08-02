@@ -2,7 +2,7 @@
 MP3 Metadaten-Verarbeitung für den MP3 Tagger.
 
 Dieses Modul bietet Funktionen zum Lesen und Verarbeiten von MP3-Dateien
-und deren ID3-Tags.
+und deren ID3-Tags, inklusive Audio-Erkennung für fehlende Metadaten.
 """
 
 import os
@@ -11,7 +11,7 @@ from io import BytesIO
 from mutagen.mp3 import MP3
 from PIL import Image
 from mutagen.id3 import ID3NoHeaderError
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any, Optional, Tuple
 from .utils import is_mp3_file
 
 
@@ -50,7 +50,7 @@ def get_image_dimensions_from_file(file_path: str) -> tuple:
 
 
 class MP3FileInfo:
-    """Klasse zur Repräsentation einer MP3-Datei mit Metadaten."""
+    """Klasse zur Repräsentation einer MP3-Datei mit Metadaten und Audio-Erkennung."""
     
     def __init__(self, file_path: str):
         self.file_path = file_path
@@ -64,9 +64,20 @@ class MP3FileInfo:
         self.album = ""
         self.cover_status = "Nein"
         
+        # Audio-Erkennungsergebnisse für fehlende Tags
+        self.recognized_title = None
+        self.recognized_artist = None
+        self.recognition_source = None
+        self.needs_recognition = False
+        
         self._load_file_info()
         self._load_id3_tags()
         self._detect_cover()
+        self._check_recognition_needed()
+    
+    def _check_recognition_needed(self):
+        """Prüft, ob Audio-Erkennung für fehlende Tags benötigt wird."""
+        self.needs_recognition = not self.title.strip() or not self.artist.strip()
     
     def _load_file_info(self):
         """Lädt grundlegende Dateiinformationen."""
@@ -259,10 +270,92 @@ def get_mp3_statistics(grouped_files: Dict[str, List[MP3FileInfo]]) -> Dict[str,
     """
     total_files = sum(len(files) for files in grouped_files.values())
     total_directories = len(grouped_files)
-    total_size = sum(file.size for files in grouped_files.values() for file in files)
+    total_size = sum(sum(f.size for f in files) for files in grouped_files.values())
+    
+    # Zusätzliche Statistiken für Audio-Erkennung
+    needs_recognition = sum(sum(1 for f in files if f.needs_recognition) for files in grouped_files.values())
+    has_recognition = sum(sum(1 for f in files if f.recognized_title or f.recognized_artist) for files in grouped_files.values())
     
     return {
         'total_files': total_files,
         'total_directories': total_directories,
-        'total_size_mb': total_size / (1024 * 1024)
+        'total_size_mb': total_size / (1024 * 1024),
+        'needs_recognition': needs_recognition,
+        'has_recognition': has_recognition
     }
+
+
+# === AUDIO RECOGNITION INTEGRATION ===
+
+def set_recognition_result(mp3_file: MP3FileInfo, recognition_result: Dict[str, Any]) -> None:
+    """
+    Setzt Audio-Erkennungsergebnisse für eine MP3-Datei.
+    
+    Args:
+        mp3_file: MP3FileInfo Instanz
+        recognition_result: Erkennungsergebnis von AudioRecognitionService
+    """
+    if recognition_result.get('success'):
+        mp3_file.recognized_title = recognition_result.get('title')
+        mp3_file.recognized_artist = recognition_result.get('artist')
+        mp3_file.recognition_source = recognition_result.get('source')
+    else:
+        mp3_file.recognized_title = None
+        mp3_file.recognized_artist = None
+        mp3_file.recognition_source = None
+
+
+def get_files_needing_recognition(grouped_files: Dict[str, List[MP3FileInfo]]) -> List[MP3FileInfo]:
+    """
+    Sammelt alle Dateien, die Audio-Erkennung benötigen.
+    
+    Args:
+        grouped_files: Gruppierte MP3-Dateien
+        
+    Returns:
+        Liste der Dateien, die Erkennung benötigen
+    """
+    files_needing_recognition = []
+    
+    for files in grouped_files.values():
+        for mp3_file in files:
+            if mp3_file.needs_recognition:
+                files_needing_recognition.append(mp3_file)
+    
+    return files_needing_recognition
+
+
+def get_display_title(mp3_file: MP3FileInfo) -> Tuple[str, bool]:
+    """
+    Gibt den anzuzeigenden Titel zurück mit Information ob er erkannt wurde.
+    
+    Args:
+        mp3_file: MP3FileInfo Instanz
+        
+    Returns:
+        Tuple (title, is_recognized)
+    """
+    if mp3_file.title:
+        return mp3_file.title, False
+    elif mp3_file.recognized_title:
+        return mp3_file.recognized_title, True
+    else:
+        return "", False
+
+
+def get_display_artist(mp3_file: MP3FileInfo) -> Tuple[str, bool]:
+    """
+    Gibt den anzuzeigenden Künstler zurück mit Information ob er erkannt wurde.
+    
+    Args:
+        mp3_file: MP3FileInfo Instanz
+        
+    Returns:
+        Tuple (artist, is_recognized)
+    """
+    if mp3_file.artist:
+        return mp3_file.artist, False
+    elif mp3_file.recognized_artist:
+        return mp3_file.recognized_artist, True
+    else:
+        return "", False

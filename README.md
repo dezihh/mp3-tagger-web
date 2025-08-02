@@ -6,13 +6,38 @@ Eine moderne, webbasierte Anwendung zur Verwaltung und Bearbeitung von MP3-Metad
 
 - **🔍 Hover-Tooltips**: Detaillierte MP3-Informationen bei Dateiname-Hover
 - **📝 Batch-Bearbeitung**: Mehrere Dateien gleichzeitig bearbeiten
-- **✅ Smart Checkboxes**: Automatische Aktivierung bei Feldänderungen
+- **✅ Smart Checkboxes**: Automatische Aktivierung bei Feldänderungen  
 - **📊 Progress-Bar**: Visuelles Feedback beim Speichern ohne störende Dialoge
 - **🎵 Audio-Preview**: Integrierte MP3-Wiedergabe
 - **🖼️ Cover-Anzeige**: Pixelauflösung und Thumbnail-Vorschau
 - **📱 Responsive Design**: Optimiert für verschiedene Bildschirmgrößen
+- **🎯 Audio-Erkennung**: Automatische Titel- und Künstler-Erkennung via AcoustID/Shazam
 
-## 🏗️ Code-Architektur (Optimiert)
+## 🎼 Audio-Erkennung System
+
+### **Zwei-Stufen-Erkennung**
+1. **AcoustID (Primär)**: Hochgenaue Fingerprint-basierte Erkennung
+2. **Shazam (Fallback)**: Zusätzliche Erkennung wenn AcoustID fehlschlägt
+
+### **Intelligente Verarbeitung**
+- **Bedarfserkennung**: Nur Dateien ohne Titel oder Künstler werden verarbeitet
+- **Visuelle Kennzeichnung**: Erkannte Tags werden kursiv und grün markiert dargestellt
+- **Nicht-destruktiv**: Erkannte Werte werden erst bei manuellem Speichern übernommen
+- **Caching**: Bereits erkannte Dateien werden zwischengespeichert
+
+## 🚀 Schnellstart
+
+1. **Verzeichnis auswählen**: MP3-Verzeichnis auf der Startseite eingeben
+2. **Dateien scannen**: Automatischer Scan aller MP3-Dateien mit Metadaten-Extraktion
+3. **Audio-Erkennung** (optional): Button "� Audio-Erkennung" für fehlende Tags
+4. **Tags bearbeiten**: Direkte Bearbeitung in der Tabelle (Auto-Checkbox-Aktivierung)
+5. **Batch-Speichern**: Ausgewählte Änderungen mit Progress-Bar speichern
+
+### **Audio-Erkennung verwenden**
+- **Automatische Erkennung**: Dateien ohne Titel/Künstler werden automatisch identifiziert
+- **Ein-Klick-Start**: Button "🎵 Audio-Erkennung" startet Batch-Verarbeitung
+- **Erkannte Tags**: Werden kursiv und grün markiert angezeigt
+- **Speichern**: Erkannte Werte werden erst beim manuellen Speichern übernommen
 
 ### Frontend (HTML/CSS/JavaScript)
 - **`templates/results.html`**: Optimiertes Template mit modularem JavaScript

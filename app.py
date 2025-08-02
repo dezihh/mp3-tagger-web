@@ -1,18 +1,48 @@
 """
 Flask Webserver für MP3 Tagger Web Application
 
-Haupteinstiegspunkt der Webanwendung mit Historie-Funktionalität für
-zuletzt verwendete Verzeichnisse und modularer MP3-Verzeichnis-Verarbeitung.
+Haupteinstiegspunkt der Webanwendung mit Historie-Funktionalität,
+Audio-Erkennung und erweiterten MP3-Verarbeitungsfunktionen.
 """
 
 from flask import Flask, render_template, request, redirect, url_for, send_file, abort, jsonify
 import os
 import urllib.parse
+import asyncio
+import configparser
 from tagger.directory_history import get_directory_history
-from tagger.mp3_processor import scan_mp3_directory, get_mp3_statistics
+from tagger.mp3_processor import (
+    scan_mp3_directory, get_mp3_statistics, get_files_needing_recognition,
+    set_recognition_result, get_display_title, get_display_artist
+)
 from tagger.utils import has_mp3_files, count_mp3_files_in_directory, is_mp3_file, get_detailed_mp3_info, save_mp3_tags
+from tagger.audio_recognition import create_recognition_service, AudioRecognitionBatch
 
 app = Flask(__name__)
+
+# Template-Funktionen registrieren
+@app.template_global()
+def get_display_title_for_template(mp3_file):
+    """Template-Funktion für Titel-Anzeige."""
+    return get_display_title(mp3_file)
+
+@app.template_global()
+def get_display_artist_for_template(mp3_file):
+    """Template-Funktion für Artist-Anzeige."""
+    return get_display_artist(mp3_file)
+
+# Globale Audio-Recognition Service Instanz
+recognition_service = None
+
+def get_recognition_service():
+    """Lazy-Loading des Recognition Service."""
+    global recognition_service
+    if recognition_service is None:
+        try:
+            recognition_service = create_recognition_service()
+        except Exception as e:
+            print(f"⚠️ Audio-Recognition Service konnte nicht initialisiert werden: {e}")
+    return recognition_service
 
 
 @app.route('/', methods=['GET', 'POST'])
@@ -205,6 +235,217 @@ def save_tags():
         return jsonify({
             'success': False,
             'message': f'Fehler beim Speichern der Tags: {str(e)}'
+        })
+
+
+@app.route('/api/audio-recognition', methods=['POST'])
+def audio_recognition():
+    """
+    API-Endpoint für Audio-Erkennung einzelner Dateien.
+    
+    Expected JSON:
+    {
+        "filepath": "/path/to/file.mp3"
+    }
+    
+    Returns:
+        JSON mit Erkennungsergebnissen
+    """
+    try:
+        data = request.get_json()
+        
+        if not data or 'filepath' not in data:
+            return jsonify({
+                'success': False,
+                'message': 'Dateipfad erforderlich'
+            })
+        
+        file_path = data['filepath']
+        
+        # Prüfen ob Datei existiert
+        if not os.path.isfile(file_path) or not is_mp3_file(file_path):
+            return jsonify({
+                'success': False,
+                'message': 'Datei nicht gefunden oder keine MP3-Datei'
+            })
+        
+        # Recognition Service laden
+        service = get_recognition_service()
+        if not service:
+            return jsonify({
+                'success': False,
+                'message': 'Audio-Recognition Service nicht verfügbar'
+            })
+        
+        # Asynchrone Erkennung ausführen
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        
+        try:
+            result = loop.run_until_complete(service.recognize_audio(file_path))
+        finally:
+            loop.close()
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'Fehler bei Audio-Erkennung: {str(e)}'
+        })
+
+
+@app.route('/api/batch-audio-recognition', methods=['POST'])
+def batch_audio_recognition():
+    """
+    API-Endpoint für Batch-Audio-Erkennung.
+    
+    Expected JSON:
+    {
+        "mp3_dir": "/path/to/directory"
+    }
+    
+    Returns:
+        JSON mit Batch-Erkennungsergebnissen
+    """
+    try:
+        data = request.get_json()
+        
+        if not data or 'mp3_dir' not in data:
+            return jsonify({
+                'success': False,
+                'message': 'Verzeichnispfad erforderlich'
+            })
+        
+        mp3_dir = data['mp3_dir']
+        
+        # Verzeichnis scannen
+        grouped_files = scan_mp3_directory(mp3_dir)
+        files_needing_recognition = get_files_needing_recognition(grouped_files)
+        
+        if not files_needing_recognition:
+            return jsonify({
+                'success': True,
+                'message': 'Keine Dateien benötigen Audio-Erkennung',
+                'results': {},
+                'stats': {
+                    'total': 0,
+                    'processed': 0,
+                    'successful': 0
+                }
+            })
+        
+        # Recognition Service laden
+        service = get_recognition_service()
+        if not service:
+            return jsonify({
+                'success': False,
+                'message': 'Audio-Recognition Service nicht verfügbar'
+            })
+        
+        # Batch-Verarbeitung
+        batch_processor = AudioRecognitionBatch(service)
+        
+        # File paths für Batch sammeln
+        file_paths = [f.file_path for f in files_needing_recognition]
+        
+        print(f"🎵 Starte Audio-Erkennung für {len(file_paths)} Dateien...")
+        
+        # Asynchrone Batch-Verarbeitung
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        
+        try:
+            batch_results = loop.run_until_complete(batch_processor.process_files(file_paths))
+        finally:
+            loop.close()
+        
+        # Ergebnisse zu MP3FileInfo zurückmappen und ausgeben
+        processed_count = 0
+        successful_count = 0
+        recognition_data = {}
+        
+        for mp3_file in files_needing_recognition:
+            if mp3_file.file_path in batch_results:
+                result = batch_results[mp3_file.file_path]
+                set_recognition_result(mp3_file, result)
+                processed_count += 1
+                
+                if result.get('success'):
+                    successful_count += 1
+                    print(f"✅ Erkannt: {os.path.basename(mp3_file.file_path)} -> {result.get('artist')} - {result.get('title')}")
+                    
+                    # Erkennungsdaten für Frontend sammeln
+                    recognition_data[mp3_file.file_path] = {
+                        'title': result.get('title'),
+                        'artist': result.get('artist'),
+                        'source': result.get('source')
+                    }
+                else:
+                    print(f"❌ Fehlgeschlagen: {os.path.basename(mp3_file.file_path)} - {result.get('error')}")
+        
+        # Statistics sammeln
+        stats = service.get_recognition_stats()
+        
+        return jsonify({
+            'success': True,
+            'message': f'{successful_count} von {processed_count} Dateien erfolgreich erkannt',
+            'results': batch_results,
+            'recognition_data': recognition_data,
+            'stats': {
+                'total': len(files_needing_recognition),
+                'processed': processed_count,
+                'successful': successful_count,
+                **stats
+            }
+        })
+        
+    except Exception as e:
+        print(f"💥 Fehler bei batch audio recognition: {str(e)}")
+        return jsonify({
+            'success': False,
+            'message': f'Fehler bei Batch-Audio-Erkennung: {str(e)}'
+        })
+
+
+@app.route('/api/recognition-status/<path:mp3_dir>')
+def recognition_status(mp3_dir):
+    """
+    API-Endpoint für den Status der Audio-Erkennung in einem Verzeichnis.
+    
+    Args:
+        mp3_dir: Pfad zum MP3-Verzeichnis
+        
+    Returns:
+        JSON mit Recognition-Status
+    """
+    try:
+        # URL-decode des Pfads
+        mp3_dir = urllib.parse.unquote(mp3_dir)
+        
+        # Verzeichnis scannen
+        grouped_files = scan_mp3_directory(mp3_dir)
+        files_needing_recognition = get_files_needing_recognition(grouped_files)
+        
+        # Dateien mit Erkennungsergebnissen zählen
+        files_with_recognition = []
+        for files in grouped_files.values():
+            for mp3_file in files:
+                if mp3_file.recognized_title or mp3_file.recognized_artist:
+                    files_with_recognition.append(mp3_file)
+        
+        return jsonify({
+            'success': True,
+            'total_files': sum(len(files) for files in grouped_files.values()),
+            'needs_recognition': len(files_needing_recognition),
+            'has_recognition': len(files_with_recognition),
+            'recognition_sources': {}  # Kann später erweitert werden
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'Fehler beim Laden des Recognition-Status: {str(e)}'
         })
 
 
