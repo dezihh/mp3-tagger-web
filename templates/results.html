@@ -1971,6 +1971,9 @@ Möchten Sie wirklich fortfahren?`;
                     <div class="cover-actions-section">
                         <h4>🎛️ Aktionen</h4>
                         <div class="action-buttons">
+                            <button class="btn btn-warning" onclick="coverManager.removeSelectedCovers()">
+                                🗑️ Cover von ausgewählten Dateien entfernen
+                            </button>
                             <button class="btn btn-danger" onclick="coverManager.removeAllCovers()">
                                 🗑️ Alle Cover löschen
                             </button>
@@ -2038,31 +2041,83 @@ Möchten Sie wirklich fortfahren?`;
                 }).join('');
             }
 
+            getSelectedFiles() {
+                const checkedBoxes = document.querySelectorAll('.file-checkbox:checked');
+                const selectedFiles = [];
+                
+                checkedBoxes.forEach(checkbox => {
+                    // Hole den Dateipfad direkt aus dem data-filepath Attribut der Checkbox
+                    const filePath = checkbox.dataset.filepath;
+                    if (filePath) {
+                        selectedFiles.push(filePath);
+                    }
+                });
+                
+                console.log('Ausgewählte Dateien:', selectedFiles); // Debug log
+                return selectedFiles;
+            }
+
             async applyCover(coverHash, buttonElement) {
                 const coverItem = buttonElement.closest('.cover-source-item');
                 const sizeSelector = coverItem.querySelector('.size-selector');
                 const targetSize = sizeSelector.value;
+                
+                // Ausgewählte Dateien sammeln
+                const selectedFiles = this.getSelectedFiles();
+                console.log('🔍 Cover anwenden - Debug Info:');
+                console.log('- Cover Hash:', coverHash);
+                console.log('- Target Size:', targetSize);
+                console.log('- Current Directory:', this.currentDirectory);
+                console.log('- Anzahl ausgewählter Dateien:', selectedFiles.length);
+                console.log('- Ausgewählte Dateien:', selectedFiles);
                 
                 // Button deaktivieren und Loading-Status
                 buttonElement.disabled = true;
                 buttonElement.innerHTML = '⏳ Anwenden...';
 
                 try {
+                    const requestData = {
+                        directory: this.currentDirectory,
+                        cover_hash: coverHash,
+                        target_size: targetSize,
+                        delete_external: false,
+                        selected_files: selectedFiles
+                    };
+                    
+                    console.log('📤 Sende Request:', requestData);
+                    
                     const response = await makeApiCall('/api/apply-cover', {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
                         },
-                        body: JSON.stringify({
-                            directory: this.currentDirectory,
-                            cover_hash: coverHash,
-                            target_size: targetSize,
-                            delete_external: false
-                        })
+                        body: JSON.stringify(requestData)
                     });
 
+                    console.log('📥 Response erhalten:', response);
+
                     if (response.success) {
-                        showToast(response.message, 'success');
+                        // Zeige detaillierte Erfolgsmeldung mit Backend-Daten
+                        let message;
+                        if (selectedFiles.length > 0) {
+                            message = `✅ Cover auf ${selectedFiles.length} ausgewählte Datei(en) angewendet`;
+                        } else {
+                            message = `✅ Cover auf alle Dateien im Verzeichnis angewendet`;
+                        }
+                        
+                        // Zeige zusätzliche Info aus Backend falls verfügbar
+                        if (response.message) {
+                            message += `\n${response.message}`;
+                        }
+                        
+                        showToast(message, 'success', 4000); // 4 Sekunden anzeigen
+                        
+                        // Modal automatisch schließen nach Erfolgsmeldung
+                        setTimeout(() => {
+                            console.log('🔄 Schließe Cover-Modal automatisch');
+                            closeCoverModal();
+                        }, 2500);
+                        
                         // Cover-Analyse aktualisieren
                         await this.analyzeCoverSources();
                     } else {
@@ -2074,6 +2129,50 @@ Möchten Sie wirklich fortfahren?`;
                 } finally {
                     buttonElement.disabled = false;
                     buttonElement.innerHTML = '📥 Anwenden';
+                }
+            }
+
+            async removeSelectedCovers() {
+                const selectedFiles = this.getSelectedFiles();
+                
+                if (selectedFiles.length === 0) {
+                    showToast('Bitte wählen Sie mindestens eine Datei aus, aus der Cover entfernt werden sollen', 'warning');
+                    return;
+                }
+
+                if (!confirm(`Möchten Sie wirklich alle Cover aus ${selectedFiles.length} ausgewählten Datei(en) entfernen?`)) {
+                    return;
+                }
+
+                try {
+                    const response = await makeApiCall('/api/remove-covers', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            directory: this.currentDirectory,
+                            selected_files: selectedFiles
+                        })
+                    });
+
+                    if (response.success) {
+                        showToast(response.message, 'success', 4000);
+                        
+                        // Modal automatisch schließen nach erfolgreicher Entfernung
+                        setTimeout(() => {
+                            console.log('🔄 Schließe Cover-Modal nach Cover-Entfernung');
+                            closeCoverModal();
+                        }, 2500);
+                        
+                        // Cover-Analyse aktualisieren
+                        await this.analyzeCoverSources();
+                    } else {
+                        throw new Error(response.message);
+                    }
+                } catch (error) {
+                    console.error('Cover-Entfernung Fehler:', error);
+                    showToast(`Fehler: ${error.message}`, 'error');
                 }
             }
 
@@ -2094,7 +2193,14 @@ Möchten Sie wirklich fortfahren?`;
                     });
 
                     if (response.success) {
-                        showToast(response.message, 'success');
+                        showToast(response.message, 'success', 4000);
+                        
+                        // Modal automatisch schließen nach erfolgreicher Entfernung
+                        setTimeout(() => {
+                            console.log('🔄 Schließe Cover-Modal nach Komplett-Entfernung');
+                            closeCoverModal();
+                        }, 2500);
+                        
                         // Cover-Analyse aktualisieren
                         await this.analyzeCoverSources();
                     } else {

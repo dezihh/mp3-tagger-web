@@ -1103,14 +1103,15 @@ def cover_analysis():
 @app.route('/api/apply-cover', methods=['POST'])
 def apply_cover():
     """
-    API-Endpoint zum Anwenden eines Covers auf alle MP3s im Verzeichnis.
+    API-Endpoint zum Anwenden eines Covers auf ausgewählte MP3s im Verzeichnis.
     
     Expected JSON:
     {
         "directory": "/path/to/music/directory",
         "cover_hash": "md5_hash_of_cover",
         "target_size": "medium",  // small, medium, large, xlarge
-        "delete_external": false
+        "delete_external": false,
+        "selected_files": ["file1.mp3", "file2.mp3"]  // Optional: nur auf diese Dateien anwenden
     }
     
     Returns:
@@ -1130,6 +1131,15 @@ def apply_cover():
         cover_hash = data['cover_hash']
         target_size_name = data.get('target_size', 'medium')
         delete_external = data.get('delete_external', False)
+        selected_files = data.get('selected_files', [])  # Liste der ausgewählten Dateien
+        
+        # Debug Log
+        print(f"🔍 Cover anwenden - Backend Debug:")
+        print(f"   Verzeichnis: {directory}")
+        print(f"   Cover Hash: {cover_hash}")
+        print(f"   Target Size: {target_size_name}")
+        print(f"   Ausgewählte Dateien ({len(selected_files)}): {selected_files}")
+        print(f"   Modus: {'Selektiv' if selected_files else 'Alle Dateien'}")
         
         # Cover-Manager initialisieren
         cover_manager = create_cover_manager(directory)
@@ -1156,7 +1166,8 @@ def apply_cover():
         result = cover_manager.apply_cover_to_directory(
             selected_cover, 
             target_size, 
-            delete_external
+            delete_external,
+            selected_files  # Nur auf ausgewählte Dateien anwenden
         )
         
         if 'error' in result:
@@ -1165,9 +1176,15 @@ def apply_cover():
                 'message': result['error']
             })
         
+        # Erstelle aussagekräftige Erfolgsmeldung
+        if selected_files:
+            target_info = f"{result['success']} von {len(selected_files)} ausgewählten"
+        else:
+            target_info = f"{result['success']} von {result.get('total_files', 'allen')}"
+        
         return jsonify({
             'success': True,
-            'message': f'Cover erfolgreich auf {result["success"]} Dateien angewendet',
+            'message': f'Cover erfolgreich auf {target_info} Dateien angewendet',
             'results': result
         })
         
@@ -1181,11 +1198,12 @@ def apply_cover():
 @app.route('/api/remove-covers', methods=['POST'])
 def remove_covers():
     """
-    API-Endpoint zum Entfernen aller Cover aus MP3-Dateien.
+    API-Endpoint zum Entfernen von Covern aus MP3-Dateien.
     
     Expected JSON:
     {
-        "directory": "/path/to/music/directory"
+        "directory": "/path/to/music/directory",
+        "selected_files": ["file1.mp3", "file2.mp3"]  // Optional: nur aus diesen Dateien entfernen
     }
     
     Returns:
@@ -1201,14 +1219,31 @@ def remove_covers():
             })
         
         directory = data['directory']
+        selected_files = data.get('selected_files', [])  # Optional: nur bestimmte Dateien
+        
+        # Debug Log
+        print(f"🗑️ Cover entfernen - Backend Debug:")
+        print(f"   Verzeichnis: {directory}")
+        print(f"   Ausgewählte Dateien ({len(selected_files)}): {selected_files}")
+        print(f"   Modus: {'Selektiv' if selected_files else 'Alle Dateien'}")
+        
+        directory = data['directory']
         
         # Cover-Manager initialisieren und Cover entfernen
         cover_manager = create_cover_manager(directory)
-        result = cover_manager.remove_all_covers()
+        
+        # Verwende die neue remove_covers_from_files Methode
+        result = cover_manager.remove_covers_from_files(selected_files if selected_files else None)
+        
+        # Erstelle aussagekräftige Erfolgsmeldung
+        if selected_files:
+            target_info = f"{result['success']} von {len(selected_files)} ausgewählten"
+        else:
+            target_info = f"{result['success']} von {result.get('total_files', 'allen')}"
         
         return jsonify({
             'success': True,
-            'message': f'Cover von {result["success"]} Dateien entfernt',
+            'message': f'Cover von {target_info} Dateien entfernt',
             'results': result
         })
         

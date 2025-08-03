@@ -23,6 +23,7 @@ import os
 import hashlib
 from typing import Dict, List, Optional, Tuple, Any
 from dataclasses import dataclass
+from pathlib import Path
 from PIL import Image
 import io
 import requests
@@ -390,24 +391,48 @@ class CoverManager:
     
     def apply_cover_to_directory(self, cover_source: CoverSource, 
                                target_size: Tuple[int, int] = (300, 300),
-                               delete_external: bool = False) -> Dict[str, Any]:
+                               delete_external: bool = False,
+                               selected_files: List[str] = None) -> Dict[str, Any]:
         """
-        Wendet ein Cover auf alle MP3-Dateien im Verzeichnis an.
+        Wendet ein Cover auf ausgewählte MP3-Dateien im Verzeichnis an.
         
         Args:
             cover_source: Das zu verwendende Cover
             target_size: Zielgröße für das Cover
             delete_external: Ob externe Cover-Dateien gelöscht werden sollen
+            selected_files: Liste der Dateipfade auf die das Cover angewendet werden soll.
+                          Falls None oder leer, werden alle MP3-Dateien bearbeitet.
             
         Returns:
             Dict mit Ergebnissen der Operation
         """
-        mp3_files = list(self.base_directory.glob('*.mp3'))
+        # Bestimme welche MP3-Dateien bearbeitet werden sollen
+        if selected_files:
+            # Nur ausgewählte Dateien verarbeiten
+            print(f"🎯 Cover-Manager: Selektiver Modus - {len(selected_files)} Dateien ausgewählt")
+            mp3_files = []
+            for file_path in selected_files:
+                mp3_path = Path(file_path)
+                print(f"   Prüfe Datei: {file_path}")
+                if mp3_path.exists() and mp3_path.suffix.lower() == '.mp3':
+                    mp3_files.append(mp3_path)
+                    print(f"   ✅ Hinzugefügt: {mp3_path}")
+                else:
+                    print(f"   ❌ Übersprungen (nicht gefunden/kein MP3): {mp3_path}")
+        else:
+            # Alle MP3-Dateien im Verzeichnis verarbeiten
+            print(f"🎯 Cover-Manager: Alle-Dateien-Modus")
+            mp3_files = list(self.base_directory.glob('*.mp3'))
+            print(f"   Gefundene MP3-Dateien: {len(mp3_files)}")
+        
+        print(f"📊 Cover wird angewendet auf {len(mp3_files)} Dateien")
+        
         results = {
             'success': 0,
             'errors': 0,
             'processed_files': [],
-            'error_files': []
+            'error_files': [],
+            'total_files': len(mp3_files)
         }
         
         # Cover-Daten laden und normalisieren
@@ -503,6 +528,67 @@ class CoverManager:
             
         except Exception as e:
             raise Exception(f"Fehler beim Speichern des Covers in {mp3_file}: {e}")
+    
+    def remove_covers_from_files(self, file_paths: List[str] = None) -> Dict[str, Any]:
+        """
+        Entfernt Cover aus MP3-Dateien.
+        
+        Args:
+            file_paths: Liste der Dateipfade. Falls None, werden alle MP3s im Verzeichnis bearbeitet.
+            
+        Returns:
+            Dict mit Ergebnissen der Operation
+        """
+        # Bestimme welche MP3-Dateien bearbeitet werden sollen
+        if file_paths:
+            # Nur ausgewählte Dateien verarbeiten
+            print(f"🗑️ Cover-Entfernung: Selektiver Modus - {len(file_paths)} Dateien ausgewählt")
+            mp3_files = []
+            for file_path in file_paths:
+                mp3_path = Path(file_path)
+                if mp3_path.exists() and mp3_path.suffix.lower() == '.mp3':
+                    mp3_files.append(mp3_path)
+        else:
+            # Alle MP3-Dateien im Verzeichnis verarbeiten
+            print(f"🗑️ Cover-Entfernung: Alle-Dateien-Modus")
+            mp3_files = list(self.base_directory.glob('*.mp3'))
+        
+        print(f"📊 Cover wird entfernt von {len(mp3_files)} Dateien")
+        
+        results = {
+            'success': 0,
+            'errors': 0,
+            'processed_files': [],
+            'error_files': [],
+            'total_files': len(mp3_files)
+        }
+        
+        # Cover aus allen MP3-Dateien entfernen
+        for mp3_file in mp3_files:
+            try:
+                self._remove_cover_from_file(mp3_file)
+                results['success'] += 1
+                results['processed_files'].append(str(mp3_file))
+            except Exception as e:
+                results['errors'] += 1
+                results['error_files'].append({'file': str(mp3_file), 'error': str(e)})
+        
+        return results
+    
+    def _remove_cover_from_file(self, mp3_file: Path):
+        """Entfernt Cover aus einer MP3-Datei."""
+        try:
+            audio = MP3(mp3_file)
+            if audio.tags is None:
+                return  # Keine Tags, nichts zu entfernen
+            
+            # Alle Cover entfernen
+            audio.tags.delall('APIC')
+            
+            audio.save()
+            
+        except Exception as e:
+            raise Exception(f"Fehler beim Entfernen des Covers aus {mp3_file}: {e}")
     
     def remove_all_covers(self) -> Dict[str, Any]:
         """Entfernt alle Cover aus allen MP3-Dateien im Verzeichnis."""
