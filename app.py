@@ -539,9 +539,15 @@ def album_recognition():
                 'full_path': mp3_file.full_path
             })
         
-        # Asynchrone Album-Erkennung
+        # Asynchrone Album-Erkennung mit Progress-Tracking
+        progress_data = {'api_calls_made': 0, 'candidates_found': 0, 'current_operation': ''}
+        
+        def progress_callback(data):
+            progress_data.update(data)
+            print(f"Progress: {data['current_operation']} - API: {data['api_calls_made']} - Kandidaten: {data['candidates_found']}")
+        
         async def recognize_album_async():
-            return await recognition_service.recognize_album(files_info)
+            return await recognition_service.recognize_album(files_info, progress_callback)
         
         candidates, max_confidence = asyncio.run(recognize_album_async())
         
@@ -559,6 +565,8 @@ def album_recognition():
                 'confidence': candidate.confidence,
                 'source': candidate.source,
                 'external_id': candidate.external_id,
+                'cover_url': candidate.cover_url,
+                'cover_urls': candidate.cover_urls,
                 'tracks': candidate.tracks
             })
         
@@ -567,7 +575,8 @@ def album_recognition():
             'candidates': candidates_data,
             'max_confidence': max_confidence,
             'auto_apply': max_confidence >= 0.9,  # Auto-Anwenden bei hoher Konfidenz
-            'message': f'{len(candidates)} Album-Kandidaten gefunden'
+            'message': f'{len(candidates)} Album-Kandidaten gefunden',
+            'progress_data': progress_data  # Progress-Informationen für das Frontend
         })
         
     except Exception as e:
@@ -686,11 +695,14 @@ def get_extended_metadata():
     - Release-Datum, BPM, erweiterte Genres
     - Mood, ähnliche Künstler, Audio-Features  
     - Energy, Danceability, Valence etc.
+    
+    Unterstützt Frontend-Overrides für noch nicht gespeicherte Daten.
     """
     try:
         data = request.get_json()
         selected_files = data.get('selected_files', [])
         mp3_dir = data.get('directory', '')
+        frontend_overrides = data.get('frontend_overrides', {})
         
         if not selected_files:
             return jsonify({
@@ -713,17 +725,39 @@ def get_extended_metadata():
                 from tagger.mp3_processor import MP3FileInfo
                 mp3_info = MP3FileInfo(full_path)
                 
-                if mp3_info.artist and mp3_info.title:
+                # Frontend-Overrides anwenden (Priorität über ID3-Tags)
+                artist = mp3_info.artist
+                title = mp3_info.title
+                album = mp3_info.album
+                
+                # Frontend-Override Daten verwenden falls vorhanden
+                if full_path in frontend_overrides:
+                    override_data = frontend_overrides[full_path]
+                    artist = override_data.get('artist', artist) or artist
+                    title = override_data.get('title', title) or title
+                    album = override_data.get('album', album) or album
+                
+                # Mindestens Artist und Title sind erforderlich
+                if artist and title:
+                    print(f"Extended Metadata für {full_path}:")
+                    print(f"  Artist: {artist} (Override: {full_path in frontend_overrides and 'artist' in frontend_overrides[full_path]})")
+                    print(f"  Title: {title} (Override: {full_path in frontend_overrides and 'title' in frontend_overrides[full_path]})")
+                    print(f"  Album: {album} (Override: {full_path in frontend_overrides and 'album' in frontend_overrides[full_path]})")
+                    
                     # Extended Metadata sammeln
                     metadata = asyncio.run(extended_service.get_track_metadata(
-                        mp3_info.artist, mp3_info.title, mp3_info.album
+                        artist, title, album
                     ))
                     
                     if metadata.success:
                         collected_metadata[full_path] = {
-                            'artist': mp3_info.artist,
-                            'title': mp3_info.title,
-                            'album': mp3_info.album,
+                            'artist': artist,  # Verwendete Daten (mit Override)
+                            'title': title,    # Verwendete Daten (mit Override)
+                            'album': album,    # Verwendete Daten (mit Override)
+                            'original_artist': mp3_info.artist,  # Original ID3-Daten
+                            'original_title': mp3_info.title,    # Original ID3-Daten
+                            'original_album': mp3_info.album,    # Original ID3-Daten
+                            'used_frontend_override': full_path in frontend_overrides,
                             'release_date': metadata.release_date,
                             'bpm': metadata.audio_features.tempo,
                             'genres': metadata.genres + metadata.extended_genres,
@@ -733,10 +767,26 @@ def get_extended_metadata():
                             'danceability': metadata.audio_features.danceability,
                             'valence': metadata.audio_features.valence,
                             'acousticness': metadata.audio_features.acousticness,
+                            'instrumentalness': metadata.audio_features.instrumentalness,
+                            'liveness': metadata.audio_features.liveness,
+                            'speechiness': metadata.audio_features.speechiness,
+                            'loudness': metadata.audio_features.loudness,
+                            'key': metadata.audio_features.key,
+                            'mode': metadata.audio_features.mode,
+                            'time_signature': metadata.audio_features.time_signature,
                             'popularity': metadata.popularity,
+                            'explicit': metadata.explicit,
+                            'album_type': metadata.album_type,
+                            'cover_url': metadata.cover_url,
+                            'cover_urls': metadata.cover_urls,
                             'tags': metadata.tags,
                             'sources_used': metadata.sources_used
                         }
+                        
+                        print(f"✅ Extended Metadata erfolgreich gesammelt für {full_path}")
+                        print(f"   Genres: {len(metadata.genres + metadata.extended_genres)}")
+                        print(f"   BPM: {metadata.audio_features.tempo}")
+                        print(f"   Mood: {metadata.mood}")
                         
                         # Optional: Sofort in MP3-Datei speichern
                         save_immediately = data.get('save_immediately', False)
@@ -782,6 +832,17 @@ def get_extended_metadata():
                             except Exception as save_error:
                                 collected_metadata[full_path]['saved_to_file'] = False
                                 collected_metadata[full_path]['save_error'] = str(save_error)
+                                collected_metadata[full_path]['saved_to_file'] = False
+                                collected_metadata[full_path]['save_error'] = str(save_error)
+                                
+                else:
+                    print(f"❌ Keine Artist/Title Daten für {full_path} (auch nicht via Override)")
+                    print(f"   ID3 Artist: {mp3_info.artist}")
+                    print(f"   ID3 Title: {mp3_info.title}")
+                    if full_path in frontend_overrides:
+                        print(f"   Override Artist: {frontend_overrides[full_path].get('artist')}")
+                        print(f"   Override Title: {frontend_overrides[full_path].get('title')}")
+                    continue
                         
                 processed += 1
                 

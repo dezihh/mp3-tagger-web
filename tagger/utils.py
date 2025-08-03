@@ -355,8 +355,13 @@ def _validate_mp3_file(file_path: str) -> bool:
 
 def _ensure_id3_tags(audio: MP3) -> None:
     """Stellt sicher, dass ID3-Tags in der MP3-Datei existieren."""
-    if not hasattr(audio, 'tags') or not audio.tags:
-        audio.add_tags()
+    if not hasattr(audio, 'tags') or audio.tags is None:
+        try:
+            audio.add_tags()
+        except Exception as e:
+            # Ignoriere den Fehler falls Tags bereits existieren
+            if "tag already exists" not in str(e).lower():
+                raise e
 
 
 def _update_id3_tags(tags, tags_data: Dict[str, Any]) -> int:

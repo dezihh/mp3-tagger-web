@@ -92,23 +92,73 @@ function updateInputField(row, selector, value, className = '', title = '') {
     return false;
 }
 
-function updateRecognizedField(row, selector, value, source, fieldType = 'audio') {
-    const className = fieldType === 'album' ? 'album-recognized-field' : 'recognized-field';
-    const title = fieldType === 'album' ? `Erkannt als Album-Metadaten` : `Erkannt via ${source}`;
+/**
+ * Vereinheitlichtes Feld-Update mit CSS-Styling und Data-Attributen
+ * @param {string} filepath - Pfad zur MP3-Datei
+ * @param {string} fieldType - Feldtyp (title, artist, album, etc.)
+ * @param {*} value - Neuer Wert für das Feld
+ * @param {string} source - Datenquelle (audio_recognition, album_recognition, extended_metadata)
+ * @param {string} className - CSS-Klasse für visuelle Kennzeichnung
+ * @param {string} title - Tooltip-Text
+ * @returns {boolean} - Erfolg des Updates
+ */
+function updateRecognizedField(filepath, fieldType, value, source = '', className = '', title = '') {
+    const row = findRowByFilepath(filepath);
+    if (!row) {
+        console.warn('updateRecognizedField: Row nicht gefunden für:', filepath);
+        return false;
+    }
     
+    // CSS-Klassen-Mapping für Feldtypen
+    const fieldClassMap = {
+        'title': '.title-input',
+        'artist': '.artist-input', 
+        'album': '.album-input',
+        'year': '.year-input',
+        'track': '.track-input',
+        'genre': '.genre-input'
+    };
+    
+    const selector = fieldClassMap[fieldType] || `input[name="${fieldType}"]`;
     const input = row.querySelector(selector);
+    
     if (input && value) {
         input.value = value;
-        if (className) input.classList.add(className);
+        
+        // CSS-Klasse für visuelle Kennzeichnung basierend auf Quelle
+        if (source === 'audio_recognition') {
+            input.classList.add('recognized-field');
+        } else if (source === 'album_recognition') {
+            input.classList.add('album-recognized-field');
+        } else if (source === 'extended_metadata') {
+            input.classList.add('extended-metadata-field');
+        } else if (className) {
+            input.classList.add(className);
+        }
+        
+        // Kombinierte Quellen (Multi-Source)
+        const currentSources = (input.getAttribute('data-source') || '').split(',').filter(s => s);
+        if (source && !currentSources.includes(source)) {
+            currentSources.push(source);
+            input.setAttribute('data-source', currentSources.join(','));
+            
+            // Visuelle Kennzeichnung für mehrere Quellen
+            if (currentSources.length > 1) {
+                input.classList.remove('recognized-field', 'album-recognized-field', 'extended-metadata-field');
+                input.classList.add('multi-source-field');
+            }
+        }
+        
         if (title) input.setAttribute('title', title);
         
         // Wichtig: data-recognized Attribut setzen für Frontend-Override System
         input.setAttribute('data-recognized', 'true');
-        input.setAttribute('data-source', source || 'unknown');
         input.setAttribute('data-field-type', fieldType);
         
         return true;
     }
+    
+    console.warn('updateRecognizedField: Input oder Value ungültig:', { selector, input, value });
     return false;
 }
 
@@ -123,6 +173,12 @@ function formatTrackNumber(number, digits = 2) {
 
 /* === DOM UTILITIES === */
 function findRowByFilepath(filepath) {
+    // Validierung: filepath muss ein String sein
+    if (!filepath || typeof filepath !== 'string') {
+        console.warn('findRowByFilepath: Ungültiger filepath:', filepath);
+        return null;
+    }
+    
     return document.querySelector(`[data-filepath="${filepath}"]`) ||
            document.querySelector(`[data-filepath*="${filepath.split('/').pop()}"]`);
 }

@@ -73,11 +73,18 @@ class ExtendedMetadata:
     # Audio-Features
     audio_features: AudioFeatures = field(default_factory=AudioFeatures)
     
+    # Cover-Art Informationen
+    cover_url: Optional[str] = None
+    cover_urls: Dict[str, str] = field(default_factory=dict)  # verschiedene Größen
+    
     # Zusätzliche Informationen
     popularity: Optional[int] = None
     explicit: Optional[bool] = None
+    album_type: Optional[str] = None  # album, single, compilation
     
     # Metadaten
+    collected_at: str = field(default_factory=lambda: datetime.now().isoformat())
+    sources_used: List[str] = field(default_factory=list)
     collected_at: str = field(default_factory=lambda: datetime.now().isoformat())
     sources_used: List[str] = field(default_factory=list)
 
@@ -163,6 +170,27 @@ class SpotifyService:
             
         return None
     
+    async def get_track_details(self, track_id: str) -> Optional[Dict[str, Any]]:
+        """Holt Track-Details inklusive Album-Cover von Spotify"""
+        token = await self.get_access_token()
+        if not token:
+            return None
+            
+        headers = {'Authorization': f'Bearer {token}'}
+        
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(
+                    f'https://api.spotify.com/v1/tracks/{track_id}',
+                    headers=headers
+                ) as response:
+                    if response.status == 200:
+                        return await response.json()
+        except Exception as e:
+            logger.error(f"Spotify Track-Details-Fehler: {e}")
+            
+        return None
+
     async def get_audio_features(self, track_id: str) -> Optional[AudioFeatures]:
         """Holt Audio-Features für einen Track"""
         token = await self.get_access_token()
@@ -387,7 +415,7 @@ class ExtendedMetadataService:
             logger.error(f"Last.fm Datensammlung-Fehler: {e}")
     
     async def _collect_spotify_data(self, metadata: ExtendedMetadata, artist: str, title: str, album: str = None):
-        """Sammelt Daten von Spotify"""
+        """Sammelt Daten von Spotify inklusive Cover-URLs"""
         try:
             # Track suchen
             track_id = await self.spotify.search_track(artist, title, album)
@@ -398,6 +426,35 @@ class ExtendedMetadataService:
                 audio_features = await self.spotify.get_audio_features(track_id)
                 if audio_features:
                     metadata.audio_features = audio_features
+                
+                # Track-Details mit Cover-URLs holen
+                track_details = await self.spotify.get_track_details(track_id)
+                if track_details:
+                    # Album-Cover URLs extrahieren
+                    album_data = track_details.get('album', {})
+                    images = album_data.get('images', [])
+                    
+                    if images:
+                        # Verschiedene Cover-Größen speichern
+                        for img in images:
+                            size_key = f"{img['width']}x{img['height']}"
+                            metadata.cover_urls[size_key] = img['url']
+                        
+                        # Beste Cover-URL als Standard setzen
+                        metadata.cover_url = images[0]['url']  # Erste (meist größte)
+                    
+                    # Zusätzliche Album-Informationen
+                    metadata.album_type = album_data.get('album_type')
+                    
+                    # Release-Datum von Spotify (falls nicht von Last.fm verfügbar)
+                    if not metadata.release_date:
+                        release_date = album_data.get('release_date')
+                        if release_date:
+                            metadata.release_date = release_date
+                    
+                    # Popularity
+                    metadata.popularity = track_details.get('popularity')
+                    metadata.explicit = track_details.get('explicit')
                     
         except Exception as e:
             logger.error(f"Spotify Datensammlung-Fehler: {e}")

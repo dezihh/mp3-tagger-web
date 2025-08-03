@@ -346,6 +346,69 @@ button:hover {
     align-items: center;
 }
 
+/* === DATENQUELLEN LEGENDE === */
+.data-sources-legend {
+    background: #f8f9fa;
+    border-radius: 6px;
+    padding: 10px 15px;
+    margin: 10px auto;
+    max-width: 1400px;
+    border-left: 4px solid #3498db;
+}
+
+.legend-title {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: #2c3e50;
+    margin-bottom: 8px;
+}
+
+.legend-items {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 15px;
+    align-items: center;
+}
+
+.legend-item {
+    font-size: 0.8rem;
+    padding: 4px 8px;
+    border-radius: 4px;
+    border: 1px solid #ddd;
+    font-weight: 500;
+    white-space: nowrap;
+}
+
+.legend-audio {
+    background: linear-gradient(90deg, #d4edda, #f8f9fa);
+    border-left: 4px solid #28a745;
+    color: #155724;
+}
+
+.legend-album {
+    background: linear-gradient(90deg, #cce5ff, #f8f9fa);
+    border-left: 4px solid #007bff;
+    color: #004085;
+}
+
+.legend-extended {
+    background: linear-gradient(90deg, #e8f4fd, #f8f9fa);
+    border-left: 4px solid #17a2b8;
+    color: #0c5460;
+}
+
+.legend-multi {
+    background: linear-gradient(90deg, #fff3e0, #f8f9fa);
+    border-left: 4px solid #ff9800;
+    color: #e65100;
+}
+
+.legend-manual {
+    background: #fff;
+    border: 1px solid #ddd;
+    color: #6c757d;
+}
+
 /* === CHECKBOX SYSTEM === */
 .checkbox-container {
     display: flex;
@@ -556,6 +619,62 @@ button:hover {
 }
 
 .album-recognized-field:focus::before {
+    display: none;
+}
+
+/* === EXTENDED METADATA FIELDS === */
+.extended-metadata-field {
+    background: linear-gradient(90deg, #e8f4fd 0%, #f8f9fa 100%) !important;
+    font-style: italic;
+    border-left: 4px solid #17a2b8 !important;
+    color: #0c5460;
+    position: relative;
+}
+
+.extended-metadata-field::before {
+    content: "🎯";
+    position: absolute;
+    right: 3px;
+    top: 2px;
+    font-size: 0.7rem;
+    opacity: 0.7;
+}
+
+.extended-metadata-field:focus {
+    background: white !important;
+    font-style: normal;
+    border-left: 4px solid #17a2b8 !important;
+}
+
+.extended-metadata-field:focus::before {
+    display: none;
+}
+
+/* === COMBINED/MULTIPLE SOURCE FIELDS === */
+.multi-source-field {
+    background: linear-gradient(90deg, #fff3e0 0%, #f8f9fa 100%) !important;
+    font-style: italic;
+    border-left: 4px solid #ff9800 !important;
+    color: #e65100;
+    position: relative;
+}
+
+.multi-source-field::before {
+    content: "🔗";
+    position: absolute;
+    right: 3px;
+    top: 2px;
+    font-size: 0.7rem;
+    opacity: 0.7;
+}
+
+.multi-source-field:focus {
+    background: white !important;
+    font-style: normal;
+    border-left: 4px solid #ff9800 !important;
+}
+
+.multi-source-field:focus::before {
     display: none;
 }
 
@@ -894,6 +1013,107 @@ button:hover {
     text-align: center;
     color: #7f8c8d;
     font-weight: 400;
+}
+
+/* === TOOLTIP DATA SOURCE STYLING === */
+/* Audio Recognition Data (Shazam/AcoustID) */
+.tooltip-value.recognized-data {
+    background: linear-gradient(90deg, #d4edda 0%, #f8f9fa 100%);
+    color: #155724;
+    padding: 2px 6px;
+    border-radius: 4px;
+    border-left: 3px solid #28a745;
+    position: relative;
+    font-style: italic;
+}
+
+.tooltip-value.recognized-data::after {
+    content: "🎵";
+    position: absolute;
+    right: 4px;
+    top: 1px;
+    font-size: 0.7rem;
+    opacity: 0.7;
+}
+
+/* Album Recognition Data */
+.tooltip-value.album-recognized-data {
+    background: linear-gradient(90deg, #cce5ff 0%, #f8f9fa 100%);
+    color: #004085;
+    padding: 2px 6px;
+    border-radius: 4px;
+    border-left: 3px solid #007bff;
+    position: relative;
+    font-style: italic;
+}
+
+.tooltip-value.album-recognized-data::after {
+    content: "💿";
+    position: absolute;
+    right: 4px;
+    top: 1px;
+    font-size: 0.7rem;
+    opacity: 0.7;
+}
+
+/* Extended Metadata (MusicBrainz/Last.fm/Discogs) */
+.tooltip-value.extended-metadata-data {
+    background: linear-gradient(90deg, #e8f4fd 0%, #f8f9fa 100%);
+    color: #0c5460;
+    padding: 2px 6px;
+    border-radius: 4px;
+    border-left: 3px solid #17a2b8;
+    position: relative;
+    font-style: italic;
+}
+
+.tooltip-value.extended-metadata-data::after {
+    content: "🎯";
+    position: absolute;
+    right: 4px;
+    top: 1px;
+    font-size: 0.7rem;
+    opacity: 0.7;
+}
+
+/* Saved Data (ID3 Tags) */
+.tooltip-value.saved-data {
+    background: #f8f9fa;
+    color: #2c3e50;
+    padding: 2px 6px;
+    border-radius: 4px;
+    border-left: 3px solid #6c757d;
+    font-weight: 500;
+}
+
+/* Multi-Source Combined Data */
+.tooltip-value.multi-source-data {
+    background: linear-gradient(90deg, #fff3e0 0%, #f8f9fa 100%);
+    color: #e65100;
+    padding: 2px 6px;
+    border-radius: 4px;
+    border-left: 3px solid #ff9800;
+    position: relative;
+    font-style: italic;
+}
+
+.tooltip-value.multi-source-data::after {
+    content: "🔗";
+    position: absolute;
+    right: 4px;
+    top: 1px;
+    font-size: 0.7rem;
+    opacity: 0.7;
+}
+
+/* Error/Missing Data */
+.tooltip-value.missing-data {
+    background: #fff3cd;
+    color: #856404;
+    padding: 2px 6px;
+    border-radius: 4px;
+    border-left: 3px solid #ffc107;
+    font-style: italic;
 }
 
 /* === ANIMATIONS === */

@@ -26,7 +26,7 @@ import warnings
 import logging
 import time
 from typing import Dict, List, Optional, Tuple, Any
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import musicbrainzngs
 import discogs_client
 from dotenv import load_dotenv
@@ -47,6 +47,8 @@ class AlbumCandidate:
     confidence: float
     source: str  # 'musicbrainz' oder 'discogs'
     external_id: str  # MB-ID oder Discogs-ID
+    cover_url: Optional[str] = None  # Cover-Art URL
+    cover_urls: Dict[str, str] = field(default_factory=dict)  # verschiedene Größen
     
 class AlbumRecognitionService:
     """Service für Album-Erkennung mit MusicBrainz und Discogs"""
@@ -79,32 +81,64 @@ class AlbumRecognitionService:
         except Exception as e:
             logger.error(f"Fehler beim Setup der API-Clients: {e}")
     
-    async def recognize_album(self, files_info: List[Dict]) -> Tuple[List[AlbumCandidate], float]:
+    async def recognize_album(self, files_info: List[Dict], progress_callback=None) -> Tuple[List[AlbumCandidate], float]:
         """
         Erkennt das wahrscheinlichste Album basierend auf den MP3-Dateien
         
         Args:
             files_info: Liste von Datei-Informationen mit title, artist, etc.
+            progress_callback: Optional callback function für Progress-Updates
             
         Returns:
             Tuple von (Album-Kandidaten, Konfidenz-Score)
         """
         if not files_info:
             return [], 0.0
+        
+        # Progress tracking initialisieren
+        progress_data = {
+            'api_calls_made': 0,
+            'candidates_found': 0,
+            'current_operation': 'Initialisierung'
+        }
+        
+        def update_progress(operation, api_calls=None, candidates=None):
+            progress_data['current_operation'] = operation
+            if api_calls is not None:
+                progress_data['api_calls_made'] = api_calls
+            if candidates is not None:
+                progress_data['candidates_found'] = candidates
+            if progress_callback:
+                progress_callback(progress_data.copy())
             
+        update_progress('Prüfe Cache...')
         cache_key = self._generate_cache_key(files_info)
         if cache_key in self.cache:
             logger.info("Album-Erkennung aus Cache geladen")
+            update_progress('Aus Cache geladen', candidates=len(self.cache[cache_key][0]))
             return self.cache[cache_key]
         
         candidates = []
         
         # Zuerst MusicBrainz versuchen (kostenlos, kein Rate Limit)
+        update_progress('Suche in MusicBrainz...')
         try:
-            mb_candidates = await self._search_musicbrainz(files_info)
+            def mb_progress_callback(operation):
+                # Extrahiere API-Call-Zähler aus der Operation wenn vorhanden
+                if "API-Aufruf" in operation:
+                    try:
+                        api_count = int(operation.split("API-Aufruf ")[1].split(":")[0])
+                        progress_data['api_calls_made'] = api_count
+                    except:
+                        pass
+                update_progress(operation, progress_data['api_calls_made'], len(candidates))
+            
+            mb_candidates = await self._search_musicbrainz(files_info, progress_callback=mb_progress_callback)
             candidates.extend(mb_candidates)
+            update_progress(f'MusicBrainz abgeschlossen', candidates=len(candidates))
             logger.info(f"MusicBrainz: {len(mb_candidates)} Kandidaten gefunden")
         except Exception as e:
+            update_progress(f'MusicBrainz Fehler: {str(e)}')
             logger.error(f"MusicBrainz Suche fehlgeschlagen: {e}")
         
         # Discogs nur als letzter Ausweg (Rate Limit beachten!)
@@ -112,49 +146,77 @@ class AlbumRecognitionService:
         best_mb_confidence = max((c.confidence for c in candidates), default=0) if candidates else 0
         
         if len(candidates) < 2 or best_mb_confidence < 0.6:
+            update_progress('Suche in Discogs (Fallback)...')
             logger.info(f"MusicBrainz unzureichend (Kandidaten: {len(candidates)}, Konfidenz: {best_mb_confidence:.2f}), verwende Discogs als Fallback")
             try:
-                discogs_candidates = await self._search_discogs(files_info)
+                def discogs_progress_callback(operation):
+                    # Extrahiere API-Call-Zähler aus der Operation wenn vorhanden
+                    if "API-Aufruf" in operation:
+                        try:
+                            api_count = int(operation.split("API-Aufruf ")[1].split(":")[0])
+                            # MusicBrainz API calls hinzufügen
+                            progress_data['api_calls_made'] = progress_data.get('api_calls_made', 0) + api_count
+                        except:
+                            pass
+                    update_progress(operation, progress_data['api_calls_made'], len(candidates))
+                
+                discogs_candidates = await self._search_discogs(files_info, progress_callback=discogs_progress_callback)
                 candidates.extend(discogs_candidates)
+                update_progress(f'Discogs abgeschlossen', candidates=len(candidates))
                 logger.info(f"Discogs: {len(discogs_candidates)} zusätzliche Kandidaten gefunden")
             except Exception as e:
+                update_progress(f'Discogs Fehler: {str(e)}')
                 logger.error(f"Discogs Suche fehlgeschlagen (Rate Limit?): {e}")
         else:
+            update_progress('Discogs übersprungen (ausreichende MusicBrainz-Ergebnisse)')
             logger.info(f"MusicBrainz lieferte ausreichende Ergebnisse, Discogs wird übersprungen (Rate Limit schonen)")
         
         # Kandidaten nach Konfidenz sortieren
+        update_progress('Sortiere Kandidaten nach Konfidenz...')
         candidates.sort(key=lambda x: x.confidence, reverse=True)
         
         # Nur die besten 5 Kandidaten behalten
         candidates = candidates[:5]
         
         # Ergebnis cachen
+        update_progress('Speichere Ergebnis im Cache...')
         max_confidence = max((c.confidence for c in candidates), default=0.0)
         result = (candidates, max_confidence)
         self.cache[cache_key] = result
         
+        update_progress('Album-Erkennung abgeschlossen!', candidates=len(candidates))
         return result
     
-    async def _search_musicbrainz(self, files_info: List[Dict]) -> List[AlbumCandidate]:
+    async def _search_musicbrainz(self, files_info: List[Dict], progress_callback=None) -> List[AlbumCandidate]:
         """Sucht nach Album-Kandidaten in MusicBrainz"""
         candidates = []
+        api_calls = 0
+        
+        def update_progress(message):
+            if progress_callback:
+                progress_callback(f"MusicBrainz: {message}")
         
         try:
             # Sammle Artist und Track-Namen
+            update_progress("Analysiere Dateien...")
             artists = [f.get('artist', '').strip() for f in files_info if f.get('artist')]
             titles = [f.get('title', '').strip() for f in files_info if f.get('title')]
             
             if not artists or not titles:
+                update_progress("Keine gültigen Artist/Title-Daten gefunden")
                 return candidates
             
             # Häufigster Artist
             main_artist = max(set(artists), key=artists.count) if artists else ""
+            update_progress(f"Suche nach Releases von '{main_artist}'...")
             
             # Suche nach Releases des Artists mit erweiterten Parametern
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
                 
                 # Erste Suche: Genauer Artist-Name
+                api_calls += 1
+                update_progress(f"API-Aufruf {api_calls}: Suche nach Artist '{main_artist}'")
                 search_results = self.mb_client.search_releases(
                     artist=main_artist,
                     limit=25  # Erhöht von 50 für bessere Performance
@@ -162,21 +224,27 @@ class AlbumRecognitionService:
                 
                 processed_releases = set()  # Vermeidet Duplikate
                 
-                for release in search_results.get('release-list', []):
+                for i, release in enumerate(search_results.get('release-list', [])):
                     release_id = release['id']
                     if release_id in processed_releases:
                         continue
                     processed_releases.add(release_id)
                     
+                    if i % 5 == 0:  # Progress alle 5 Releases
+                        update_progress(f"Evaluiere Release {i+1}/{len(search_results.get('release-list', []))}")
+                    
                     candidate = await self._evaluate_mb_release(release, files_info)
                     if candidate and candidate.confidence > 0.2:  # Niedrigere Schwelle für MusicBrainz
                         candidates.append(candidate)
+                        update_progress(f"Kandidat gefunden: '{candidate.title}' (Konfidenz: {candidate.confidence:.2f})")
                 
                 # Falls nicht genug Ergebnisse: Fuzzy-Suche nach Tracks
                 if len(candidates) < 3 and titles:
-                    logger.info("Erweitere MusicBrainz-Suche mit Track-Namen...")
-                    for title in titles[:3]:  # Nur die ersten 3 Tracks probieren
+                    update_progress("Erweitere Suche mit Track-Namen...")
+                    for j, title in enumerate(titles[:3]):  # Nur die ersten 3 Tracks probieren
                         try:
+                            api_calls += 1
+                            update_progress(f"API-Aufruf {api_calls}: Suche nach Track '{title}'")
                             track_search = self.mb_client.search_releases(
                                 recording=title,
                                 artist=main_artist,
@@ -251,6 +319,9 @@ class AlbumRecognitionService:
             print(f"DEBUG MusicBrainz: Release '{release_info.get('title', 'UNBEKANNT')}', Artist: '{artist_name}', Konfidenz: {confidence}")
             print(f"DEBUG MusicBrainz: Full artist-credit: {release_info.get('artist-credit')}")
             
+            # Cover-Art URLs holen
+            cover_url, cover_urls = await self._get_musicbrainz_cover_art(release_id)
+            
             return AlbumCandidate(
                 title=release_info['title'],
                 artist=artist_name,
@@ -259,18 +330,67 @@ class AlbumRecognitionService:
                 tracks=tracks,
                 confidence=confidence,
                 source='musicbrainz',
-                external_id=release_id
+                external_id=release_id,
+                cover_url=cover_url,
+                cover_urls=cover_urls
             )
             
         except Exception as e:
             logger.error(f"Fehler bei MusicBrainz Release-Bewertung: {e}")
             return None
     
-    async def _search_discogs(self, files_info: List[Dict]) -> List[AlbumCandidate]:
+    async def _get_musicbrainz_cover_art(self, release_id: str) -> Tuple[Optional[str], Dict[str, str]]:
+        """Holt Cover-Art URLs von MusicBrainz Cover Art Archive"""
+        cover_url = None
+        cover_urls = {}
+        
+        try:
+            import aiohttp
+            
+            # MusicBrainz Cover Art Archive API
+            url = f"http://coverartarchive.org/release/{release_id}"
+            
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        images = data.get('images', [])
+                        
+                        if images:
+                            # Front-Cover bevorzugen
+                            front_image = None
+                            for img in images:
+                                if img.get('front', False):
+                                    front_image = img
+                                    break
+                            
+                            # Falls kein Front-Cover, erstes Bild nehmen
+                            if not front_image and images:
+                                front_image = images[0]
+                            
+                            if front_image:
+                                thumbnails = front_image.get('thumbnails', {})
+                                cover_urls.update(thumbnails)
+                                
+                                # Beste Qualität als Standard
+                                cover_url = front_image.get('image') or thumbnails.get('large') or thumbnails.get('small')
+                                
+        except Exception as e:
+            logger.debug(f"Cover-Art für {release_id} nicht verfügbar: {e}")
+            
+        return cover_url, cover_urls
+    
+    async def _search_discogs(self, files_info: List[Dict], progress_callback=None) -> List[AlbumCandidate]:
         """Sucht nach Album-Kandidaten in Discogs"""
         candidates = []
+        api_calls = 0
+        
+        def update_progress(message):
+            if progress_callback:
+                progress_callback(f"Discogs: {message}")
         
         if not self.discogs_client:
+            update_progress("Discogs-Client nicht verfügbar")
             return candidates
         
         try:
@@ -278,18 +398,23 @@ class AlbumRecognitionService:
             time_since_last = time.time() - self.last_discogs_request
             if time_since_last < self.discogs_delay:
                 sleep_time = self.discogs_delay - time_since_last
-                logger.info(f"Discogs Rate Limiting: warte {sleep_time:.1f}s...")
+                update_progress(f"Rate Limiting: warte {sleep_time:.1f}s...")
                 await asyncio.sleep(sleep_time)
             
             # Sammle Artist und Track-Namen
+            update_progress("Analysiere Dateien...")
             artists = [f.get('artist', '').strip() for f in files_info if f.get('artist')]
             
             if not artists:
+                update_progress("Keine gültigen Artist-Daten gefunden")
                 return candidates
             
             main_artist = max(set(artists), key=artists.count)
+            update_progress(f"Suche nach Releases von '{main_artist}'...")
             
             # Suche nach Releases (nicht Masters)
+            api_calls += 1
+            update_progress(f"API-Aufruf {api_calls}: Suche nach Artist '{main_artist}'")
             self.last_discogs_request = time.time()  # Rate Limiting markieren
             search_results = self.discogs_client.search(
                 artist=main_artist,
@@ -298,7 +423,21 @@ class AlbumRecognitionService:
             )
             
             processed_count = 0
-            for release in search_results:
+            total_releases = len(list(search_results))
+            update_progress(f"Gefunden: {total_releases} Releases zur Evaluierung")
+            
+            # Reset iterator für Verarbeitung
+            search_results = self.discogs_client.search(
+                artist=main_artist,
+                type_='release',
+                per_page=15
+            )
+            
+            for i, release in enumerate(search_results):
+                # Progress alle 3 Releases
+                if i % 3 == 0:
+                    update_progress(f"Evaluiere Release {i+1}/{min(15, total_releases)}")
+                
                 # Begrenze die Anzahl der verarbeiteten Releases
                 if processed_count >= 15:
                     break
@@ -315,6 +454,7 @@ class AlbumRecognitionService:
                     candidate = await self._evaluate_discogs_release(release, files_info)
                     if candidate and candidate.confidence > 0.3:
                         candidates.append(candidate)
+                        update_progress(f"Kandidat gefunden: '{candidate.title}' (Konfidenz: {candidate.confidence:.2f})")
                         processed_count += 1
                 except Exception as e:
                     logger.warning(f"Überspringe Discogs Release wegen Fehler: {e}")
@@ -397,6 +537,29 @@ class AlbumRecognitionService:
             # Release-ID sicher extrahieren
             release_id = getattr(release, 'id', 'unknown')
             
+            # Cover-URLs von Discogs extrahieren
+            cover_url = None
+            cover_urls = {}
+            
+            if hasattr(release, 'images') and release.images:
+                for img in release.images:
+                    img_type = getattr(img, 'type', '').lower()
+                    if img_type in ['primary', 'front', '']:  # Bevorzuge Primary/Front Cover
+                        cover_url = getattr(img, 'uri', None) or getattr(img, 'uri150', None)
+                        break
+                
+                # Sammle alle verfügbaren Größen
+                for img in release.images:
+                    if hasattr(img, 'uri'):
+                        cover_urls['original'] = img.uri
+                    if hasattr(img, 'uri150'):
+                        cover_urls['150'] = img.uri150
+                
+                # Falls noch kein Cover, nimm das erste verfügbare
+                if not cover_url and release.images:
+                    first_img = release.images[0]
+                    cover_url = getattr(first_img, 'uri', None) or getattr(first_img, 'uri150', None)
+            
             return AlbumCandidate(
                 title=release_title,
                 artist=artist_name,
@@ -405,7 +568,9 @@ class AlbumRecognitionService:
                 tracks=tracks,
                 confidence=confidence,
                 source='discogs',
-                external_id=str(release_id)
+                external_id=str(release_id),
+                cover_url=cover_url,
+                cover_urls=cover_urls
             )
             
         except Exception as e:
