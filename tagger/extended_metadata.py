@@ -275,6 +275,9 @@ class ExtendedMetadataService:
     """Hauptservice für erweiterte Metadaten-Sammlung"""
     
     def __init__(self):
+        # Config aus config.env laden
+        self._load_config()
+        
         self.lastfm_key = os.getenv('LASTFM_API_KEY')
         self.spotify_client_id = os.getenv('SPOTIFY_CLIENT_ID')
         self.spotify_client_secret = os.getenv('SPOTIFY_CLIENT_SECRET')
@@ -287,6 +290,24 @@ class ExtendedMetadataService:
         
         # Cache für API-Anfragen
         self.cache = {}
+    
+    def _load_config(self):
+        """Lädt Konfiguration aus config.env"""
+        try:
+            # Pfad zur config.env Datei
+            config_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'config.env')
+            if os.path.exists(config_path):
+                with open(config_path, 'r') as f:
+                    for line in f:
+                        line = line.strip()
+                        if line and not line.startswith('#') and '=' in line:
+                            key, value = line.split('=', 1)
+                            os.environ[key.strip()] = value.strip()
+                logger.info(f"Konfiguration geladen aus {config_path}")
+            else:
+                logger.warning(f"Config-Datei nicht gefunden: {config_path}")
+        except Exception as e:
+            logger.error(f"Fehler beim Laden der Konfiguration: {e}")
     
     async def get_track_metadata(self, artist: str, title: str, album: str = None) -> ExtendedMetadata:
         """

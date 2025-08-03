@@ -46,6 +46,9 @@
             <button id="extendedMetadataBtn" class="btn btn-warning" title="Erweiterte Metadaten (BPM, Mood, Energy, etc.)">
                 🎯 Erweiterte Metadaten
             </button>
+            <button id="clearTagsBtn" class="btn btn-danger" title="Alle ID3-Tags der ausgewählten Dateien löschen" disabled>
+                🗑️ Tags löschen
+            </button>
             <button id="batchSaveBtn" class="btn btn-success" disabled>
                 <span id="saveCount">0</span> Dateien speichern
             </button>
@@ -185,6 +188,7 @@
             initializeAudioRecognition();
             initializeAlbumRecognition();
             initializeExtendedMetadata();
+            initializeClearTags();
             updateBatchButton();
         });
 
@@ -255,6 +259,11 @@
         }
 
         /* === HILFSFUNKTIONEN FÜR AUSWAHL-MANAGEMENT === */
+        /**
+         * Verwaltet die Auswahl einzelner Dateien im globalen selectedFiles Set
+         * @param {string} filepath - Vollständiger Pfad zur Datei
+         * @param {boolean} selected - true wenn Datei ausgewählt, false wenn abgewählt
+         */
         function toggleFileSelection(filepath, selected) {
             if (selected) {
                 selectedFiles.add(filepath);
@@ -263,6 +272,10 @@
             }
         }
 
+        /**
+         * Aktualisiert alle Verzeichnis-spezifischen Auswahl-Checkboxen basierend auf 
+         * dem Status der individuellen Datei-Checkboxen in jedem Verzeichnis
+         */
         function updateDirectorySelects() {
             const directorySelects = document.querySelectorAll('.select-all-directory');
             directorySelects.forEach(select => {
@@ -275,6 +288,11 @@
             });
         }
 
+        /**
+         * Aktualisiert die globale "Alle auswählen" Checkbox basierend auf dem
+         * aktuellen Zustand aller individuellen Datei-Checkboxen
+         * Setzt indeterminate State wenn nur teilweise ausgewählt
+         */
         function updateGlobalSelect() {
             const globalSelect = document.getElementById('select-all-global');
             const allCheckboxes = document.querySelectorAll('.file-checkbox');
@@ -284,10 +302,15 @@
             globalSelect.checked = checkedBoxes.length > 0;
         }
 
+        /**
+         * Aktiviert/deaktiviert die Batch-Operationsbuttons basierend auf
+         * der Anzahl der ausgewählten Dateien
+         */
         function updateBatchButton() {
             const batchButton = document.getElementById('batch-process');
             const saveBtn = document.getElementById('batchSaveBtn');
             const saveCount = document.getElementById('saveCount');
+            const clearTagsBtn = document.getElementById('clearTagsBtn');
             const count = selectedFiles.size;
             
             batchButton.textContent = `Ausgewählte verarbeiten (${count})`;
@@ -296,6 +319,10 @@
             if (saveBtn && saveCount) {
                 saveBtn.disabled = count === 0;
                 saveCount.textContent = count;
+            }
+            
+            if (clearTagsBtn) {
+                clearTagsBtn.disabled = count === 0;
             }
         }
 
@@ -314,6 +341,13 @@
             });
         }
 
+        /**
+         * Verwaltet Play/Pause-Funktionalität für MP3-Dateien
+         * Stellt sicher, dass nur ein Track gleichzeitig abgespielt wird
+         * @param {HTMLElement} button - Der geklickte Play-Button
+         * @param {string} filepath - Pfad zur MP3-Datei
+         * @param {HTMLAudioElement} audioPlayer - HTML Audio Element für Wiedergabe
+         */
         function togglePlayback(button, filepath, audioPlayer) {
             // Aktuellen Track stoppen wenn derselbe Button geklickt
             if (currentAudio && !currentAudio.paused && currentPlayButton === button) {
@@ -402,7 +436,9 @@
             makeApiCall(`/api/mp3-info?filepath=${encodedPath}`)
                 .then(data => {
                     if (tooltipElement.classList.contains('show')) {
-                        renderTooltipContent(data);
+                        // Extended Metadata aus DOM ergänzen, falls vorhanden
+                        const enhancedData = enhanceDataWithDomExtendedMetadata(data, filepath);
+                        renderTooltipContent(enhancedData);
                     }
                 })
                 .catch(error => {
@@ -410,6 +446,113 @@
                         tooltipElement.innerHTML = '<div class="tooltip-error">Fehler beim Laden der Informationen</div>';
                     }
                 });
+        }
+
+        /**
+         * Ergänzt API-Daten mit Extended Metadata aus dem DOM, falls vorhanden
+         * @param {Object} apiData - Daten von der MP3-Info API
+         * @param {string} filepath - Dateipfad für DOM-Suche
+         * @returns {Object} Erweiterte Daten mit DOM Extended Metadata
+         */
+        function enhanceDataWithDomExtendedMetadata(apiData, filepath) {
+            const row = document.querySelector(`[data-filepath="${filepath}"]`);
+            if (!row) return apiData;
+            
+            const extendedDataAttr = row.dataset.extendedMetadata;
+            if (!extendedDataAttr) return apiData;
+            
+            try {
+                const domExtendedData = JSON.parse(extendedDataAttr);
+                
+                // Erstelle erweiterte Daten-Struktur
+                const enhancedData = { ...apiData };
+                
+                // Ergänze/überschreibe extended Sektion mit DOM-Daten
+                if (!enhancedData.extended) {
+                    enhancedData.extended = {};
+                }
+                
+                // Formatiere DOM Extended Metadata für Tooltip-Anzeige
+                // Debug: Log DOM Extended Data
+                console.log('DOM Extended Metadata:', domExtendedData);
+                
+                // BPM speichern (auch wenn null, für Debug)
+                if (domExtendedData.bpm !== undefined && domExtendedData.bpm !== null && domExtendedData.bpm > 0) {
+                    enhancedData.extended['🎵 BPM'] = Math.round(domExtendedData.bpm);
+                }
+                
+                // Genres - immer anzeigen wenn vorhanden (auch ohne Filterung)
+                if (domExtendedData.genres && Array.isArray(domExtendedData.genres) && domExtendedData.genres.length > 0) {
+                    enhancedData.extended['🎪 Genres (erweitert)'] = domExtendedData.genres.slice(0, 4).join(', ');
+                }
+                
+                // Mood - nur anzeigen wenn vorhanden und nicht leer
+                if (domExtendedData.mood && Array.isArray(domExtendedData.mood) && domExtendedData.mood.length > 0) {
+                    enhancedData.extended['🎭 Mood'] = domExtendedData.mood.slice(0, 3).join(', ');
+                }
+                
+                // Similar Artists - immer anzeigen wenn vorhanden (auch ohne Filterung)
+                if (domExtendedData.similar_artists && Array.isArray(domExtendedData.similar_artists) && domExtendedData.similar_artists.length > 0) {
+                    enhancedData.extended['👥 Ähnliche Künstler'] = domExtendedData.similar_artists.slice(0, 3).join(', ');
+                }
+                
+                // Tags - immer anzeigen wenn vorhanden (auch ohne Filterung)
+                if (domExtendedData.tags && Array.isArray(domExtendedData.tags) && domExtendedData.tags.length > 0) {
+                    enhancedData.extended['🏷️ Tags'] = domExtendedData.tags.slice(0, 4).join(', ');
+                }                // Audio Features - nur hinzufügen wenn mindestens ein Wert vorhanden
+                const audioFeatures = [];
+                if (domExtendedData.energy !== undefined && domExtendedData.energy !== null && domExtendedData.energy > 0) {
+                    audioFeatures.push(`Energy: ${domExtendedData.energy.toFixed(2)}`);
+                }
+                if (domExtendedData.danceability !== undefined && domExtendedData.danceability !== null && domExtendedData.danceability > 0) {
+                    audioFeatures.push(`Danceability: ${domExtendedData.danceability.toFixed(2)}`);
+                }
+                if (domExtendedData.valence !== undefined && domExtendedData.valence !== null && domExtendedData.valence >= 0) {
+                    audioFeatures.push(`Valence: ${domExtendedData.valence.toFixed(2)}`);
+                }
+                if (domExtendedData.acousticness !== undefined && domExtendedData.acousticness !== null && domExtendedData.acousticness >= 0) {
+                    audioFeatures.push(`Acousticness: ${domExtendedData.acousticness.toFixed(2)}`);
+                }
+                
+                if (audioFeatures.length > 0) {
+                    enhancedData.extended['🎵 Audio Features'] = audioFeatures.join(', ');
+                }
+                
+                // Release Date - nur wenn vorhanden
+                if (domExtendedData.release_date && domExtendedData.release_date !== null) {
+                    enhancedData.extended['📅 Release Datum'] = domExtendedData.release_date;
+                }
+                
+                // Popularity - nur wenn vorhanden und > 0
+                if (domExtendedData.popularity !== undefined && domExtendedData.popularity !== null && domExtendedData.popularity > 0) {
+                    enhancedData.extended['⭐ Popularity'] = `${domExtendedData.popularity}/100`;
+                }
+                
+                // API-Quellen anzeigen
+                if (domExtendedData.sources_used && Array.isArray(domExtendedData.sources_used) && domExtendedData.sources_used.length > 0) {
+                    enhancedData.extended['📡 Quellen'] = domExtendedData.sources_used.join(', ');
+                }
+                
+                // Status-Indikator nur wenn Extended Metadata verfügbar
+                const hasExtendedData = domExtendedData.genres?.length > 0 || 
+                                      domExtendedData.tags?.length > 0 || 
+                                      domExtendedData.similar_artists?.length > 0 ||
+                                      domExtendedData.bpm > 0 ||
+                                      audioFeatures.length > 0;
+                
+                if (hasExtendedData) {
+                    enhancedData.extended['💾 Status'] = 'Bereit zum Speichern (noch nicht in Datei)';
+                }
+                
+                // Debug-Log für Frontend
+                console.log('Enhanced tooltip data:', enhancedData.extended);
+                
+                return enhancedData;
+                
+            } catch (e) {
+                console.warn('Fehler beim Parsen der DOM Extended Metadata:', e);
+                return apiData;
+            }
         }
 
         function hideTooltip() {
@@ -469,6 +612,11 @@
         }
 
         /* === TOOLTIP CONTENT RENDERING === */
+        /**
+         * Erstellt den HTML-Inhalt für den Hover-Tooltip basierend auf MP3-Metadaten
+         * Zeigt technische Infos, ID3-Tags, erweiterte Metadaten und Cover-Bilder an
+         * @param {Object} data - MP3-Metadaten vom Backend mit technical/basic/extended/cover Eigenschaften
+         */
         function renderTooltipContent(data) {
             if (data.error) {
                 tooltipElement.innerHTML = `<div class="tooltip-error">${data.error}</div>`;
@@ -565,13 +713,31 @@
                 return;
             }
 
-            // Progress-System starten
-            const progressController = createProgressController();
-            progressController.show();
-            progressController.updateProgress(25, `Übertrage ${filesToSave.length} Dateien...`);
+            // Progress-System starten - direkter Aufruf des universellen Controllers
+            const saveBtn = document.getElementById('batchSaveBtn');
+            const progressController = createUniversalProgressController({ 
+                title: '💾 Tags werden gespeichert...' 
+            });
+            
+            // Controller erweitern mit Save-spezifischer Logik
+            const extendedController = {
+                show: () => {
+                    if (saveBtn) saveBtn.disabled = true;
+                    progressController.show();
+                    progressController.updateProgress(0, 'Sammle Datei-Informationen...');
+                },
+                updateProgress: progressController.updateProgress,
+                hide: () => {
+                    progressController.hide();
+                    if (saveBtn) saveBtn.disabled = false;
+                }
+            };
+            
+            extendedController.show();
+            extendedController.updateProgress(25, `Übertrage ${filesToSave.length} Dateien...`);
 
             // API-Request ausführen
-            performSaveRequest(filesToSave, progressController);
+            performSaveRequest(filesToSave, extendedController);
         }
 
         function collectFilesToSave() {
@@ -605,31 +771,6 @@
             });
             
             return filesToSave;
-        }
-
-        /* === SAVE PROGRESS CONTROLLER ===
-         * Nutzt die wiederverwendbare createUniversalProgressController Funktion
-         */
-        function createProgressController() {
-            const saveBtn = document.getElementById('batchSaveBtn');
-            const controller = createUniversalProgressController({
-                title: '💾 Tags werden gespeichert...'
-            });
-            
-            return {
-                show: (title) => {
-                    saveBtn.disabled = true;
-                    controller.show(title);
-                    controller.updateProgress(0, 'Sammle Datei-Informationen...');
-                },
-                
-                updateProgress: controller.updateProgress,
-                
-                hide: () => {
-                    controller.hide();
-                    saveBtn.disabled = false;
-                }
-            };
         }
 
         /* === SAVE REQUEST OPTIMIERT ===
@@ -670,11 +811,21 @@
         /* === ERROR HANDLERS OPTIMIERT ===
          * Nutzt wiederverwendbare Error-Handling-Funktionen
          */
-        function handleSaveError(error, progressController) {
-            handleApiError(error, 'Speichern der Tags');
-            progressController.updateProgress(100, '', '❌ Fehler beim Speichern der Tags');
+        /**
+         * Universeller Error-Handler für alle API-Operationen
+         * @param {Error} error - Der aufgetretene Fehler
+         * @param {Object} progressController - Progress Controller für UI-Updates
+         * @param {string} operationName - Name der Operation für Fehlermeldungen
+         */
+        function handleUniversalApiError(error, progressController, operationName) {
+            handleApiError(error, operationName);
+            progressController.updateProgress(100, '', `❌ Fehler bei ${operationName.toLowerCase()}`);
             document.getElementById('saveProgressStatus').style.color = '#e74c3c';
             setTimeout(() => progressController.hide(), 3000);
+        }
+
+        function handleSaveError(error, progressController) {
+            handleUniversalApiError(error, progressController, 'Speichern der Tags');
         }
 
         function resetFileSelection() {
@@ -687,8 +838,8 @@
             updateBatchButton();
         }
 
-        /* === AUDIO RECOGNITION SYSTEM ===
-         * Batch-Audio-Erkennung für fehlende Titel und Künstler
+        /* === ALBUM RECOGNITION SYSTEM ===
+         * Album-Erkennung mit MusicBrainz und Discogs mit Auswahl-Dialog
          */
         function initializeAudioRecognition() {
             const recognitionBtn = document.getElementById('audioRecognitionBtn');
@@ -699,40 +850,32 @@
 
         function performAudioRecognition() {
             const recognitionBtn = document.getElementById('audioRecognitionBtn');
-            const mp3Dir = '{{ mp3_dir }}'; // Aus Template-Context
+            const mp3Dir = '{{ mp3_dir }}';
             
             // Button deaktivieren
             recognitionBtn.disabled = true;
             recognitionBtn.innerHTML = '🔍 Erkenne Audio...';
             
             // Progress-System für Audio-Erkennung
-            const progressController = createRecognitionProgressController();
+            const progressController = createUniversalProgressController({
+                title: '🎵 Audio-Erkennung läuft...'
+            });
             progressController.show();
             progressController.updateProgress(0, 'Scanne Dateien nach fehlenden Tags...');
             
-            // API-Request für Batch-Audio-Erkennung mit optimierter makeApiCall
             makeApiCall('/api/batch-audio-recognition', {
                 method: 'POST',
                 body: JSON.stringify({ mp3_dir: mp3Dir })
             })
-            .then(data => handleRecognitionResponse(data, progressController))
-            .catch(error => handleRecognitionError(error, progressController))
+            .then(data => handleAudioRecognitionResponse(data, progressController))
+            .catch(error => handleUniversalApiError(error, progressController, 'Audio-Erkennung'))
             .finally(() => {
                 recognitionBtn.disabled = false;
                 recognitionBtn.innerHTML = '🎵 Audio-Erkennung';
             });
         }
 
-        /* === AUDIO RECOGNITION PROGRESS CONTROLLER ===
-         * Nutzt die wiederverwendbare createUniversalProgressController Funktion
-         */
-        function createRecognitionProgressController() {
-            return createUniversalProgressController({
-                title: '🎵 Audio-Erkennung läuft...'
-            });
-        }
-
-        function handleRecognitionResponse(data, progressController) {
+        function handleAudioRecognitionResponse(data, progressController) {
             progressController.updateProgress(100, '');
             
             if (data.success) {
@@ -745,27 +888,19 @@
                     updateRecognizedFields(data.recognition_data);
                 }
                 
-                // Kurz warten, dann Progress ausblenden
-                setTimeout(() => {
-                    progressController.hide();
-                }, 2000);
+                setTimeout(() => progressController.hide(), 2000);
             } else {
                 progressController.updateProgress(100, '', `❌ ${data.message}`);
-                document.getElementById('saveProgressStatus').style.color = '#e74c3c';
-                
                 setTimeout(() => progressController.hide(), 3000);
             }
         }
 
-        /* === UPDATE RECOGNIZED FIELDS - OPTIMIERT ===
-         * Nutzt die wiederverwendbaren updateRecognizedField Funktionen
-         */
         function updateRecognizedFields(recognitionData) {
             // Durch alle erkannten Dateien iterieren
             Object.entries(recognitionData).forEach(([filepath, data]) => {
                 const row = findRowByFilepath(filepath);
                 if (row) {
-                    // Titel-Feld aktualisieren mit utils-Funktion
+                    // Titel-Feld aktualisieren
                     if (data.title) {
                         const titleInput = row.querySelector('.title-input');
                         if (titleInput && !titleInput.value.trim()) {
@@ -774,7 +909,7 @@
                         }
                     }
                     
-                    // Artist-Feld aktualisieren mit utils-Funktion
+                    // Artist-Feld aktualisieren
                     if (data.artist) {
                         const artistInput = row.querySelector('.artist-input');
                         if (artistInput && !artistInput.value.trim()) {
@@ -788,16 +923,6 @@
             console.log(`🎵 ${Object.keys(recognitionData).length} Felder mit erkannten Daten aktualisiert`);
         }
 
-        function handleRecognitionError(error, progressController) {
-            handleApiError(error, 'Audio-Erkennung');
-            progressController.updateProgress(100, '', '❌ Fehler bei der Audio-Erkennung');
-            document.getElementById('saveProgressStatus').style.color = '#e74c3c';
-            setTimeout(() => progressController.hide(), 3000);
-        }
-
-        /* === ALBUM RECOGNITION SYSTEM ===
-         * Album-Erkennung mit MusicBrainz und Discogs mit Auswahl-Dialog
-         */
         function initializeAlbumRecognition() {
             const albumBtn = document.getElementById('albumRecognitionBtn');
             if (albumBtn) {
@@ -816,21 +941,26 @@
                 return;
             }
             
+            // Frontend-Daten sammeln (falls Audio-Erkennung bereits durchgeführt wurde)
+            const frontendOverrides = collectFrontendOverrides(selectedFilePaths);
+            
             // Button deaktivieren
             albumBtn.disabled = true;
             albumBtn.innerHTML = '🔍 Erkenne Album...';
             
             // Progress-System für Album-Erkennung
-            const progressController = createAlbumProgressController();
+            const progressController = createUniversalProgressController({
+                title: '💿 Album-Erkennung läuft...'
+            });
             progressController.show();
             progressController.updateProgress(0, 'Analysiere Dateien für Album-Erkennung...');
             
-            // API-Request für Album-Erkennung mit optimierter makeApiCall
             makeApiCall('/api/album-recognition', {
                 method: 'POST',
                 body: JSON.stringify({ 
                     directory: mp3Dir,
-                    selected_files: selectedFilePaths
+                    selected_files: selectedFilePaths,
+                    frontend_overrides: frontendOverrides // Neue Daten für Backend
                 })
             })
             .then(data => handleAlbumRecognitionResponse(data, progressController))
@@ -841,14 +971,50 @@
             });
         }
 
-        /* === ALBUM RECOGNITION PROGRESS CONTROLLER ===
-         * Nutzt die wiederverwendbare createUniversalProgressController Funktion
+        /**
+         * Sammelt Frontend-Override-Daten für Dateien, die bereits Audio-Erkennung hatten
+         * @param {Array} filePaths - Array der Dateipfade
+         * @returns {Object} Override-Daten pro Datei
          */
-        function createAlbumProgressController() {
-            return createUniversalProgressController({
-                title: '� Album-Erkennung läuft...'
+        function collectFrontendOverrides(filePaths) {
+            const overrides = {};
+            
+            filePaths.forEach(filepath => {
+                const row = findRowByFilepath(filepath);
+                if (row) {
+                    const titleInput = row.querySelector('.title-input');
+                    const artistInput = row.querySelector('.artist-input');
+                    
+                    // Nur Daten sammeln, wenn sie vom Frontend (Audio-Erkennung) stammen
+                    const titleValue = titleInput?.value?.trim();
+                    const artistValue = artistInput?.value?.trim();
+                    
+                    // Prüfen ob es erkannte Daten sind (haben data-recognized Attribut)
+                    const titleRecognized = titleInput?.getAttribute('data-recognized') === 'true';
+                    const artistRecognized = artistInput?.getAttribute('data-recognized') === 'true';
+                    
+                    if (titleValue || artistValue) {
+                        overrides[filepath] = {};
+                        
+                        if (titleValue) {
+                            overrides[filepath].title = titleValue;
+                            overrides[filepath].title_source = titleRecognized ? 'audio_recognition' : 'manual_input';
+                        }
+                        
+                        if (artistValue) {
+                            overrides[filepath].artist = artistValue;
+                            overrides[filepath].artist_source = artistRecognized ? 'audio_recognition' : 'manual_input';
+                        }
+                        
+                        console.log(`🔧 Override für ${filepath.split('/').pop()}: T:${titleValue}(${titleRecognized ? 'erkannt' : 'manuell'}), A:${artistValue}(${artistRecognized ? 'erkannt' : 'manuell'})`);
+                    }
+                }
             });
+            
+            console.log('🔧 Frontend-Overrides gesammelt:', overrides);
+            return overrides;
         }
+
 
         function handleAlbumRecognitionResponse(data, progressController) {
             progressController.hide();
@@ -947,6 +1113,9 @@
             const mp3Dir = '{{ mp3_dir }}';
             const selectedFilePaths = Array.from(selectedFiles);
             
+            // Frontend-Overrides sammeln (wichtig für Track-Matching)
+            const frontendOverrides = collectFrontendOverrides(selectedFilePaths);
+            
             try {
                 // API-Request zum Anwenden der Album-Daten mit optimierter makeApiCall
                 const data = await makeApiCall('/api/apply-album', {
@@ -954,7 +1123,8 @@
                     body: JSON.stringify({
                         directory: mp3Dir,
                         selected_files: selectedFilePaths,
-                        album_data: albumData
+                        album_data: albumData,
+                        frontend_overrides: frontendOverrides  // Frontend-Overrides mitgeben
                     })
                 });
                 
@@ -1008,10 +1178,7 @@
         }
 
         function handleAlbumRecognitionError(error, progressController) {
-            handleApiError(error, 'Album-Erkennung');
-            progressController.updateProgress(100, '', '❌ Fehler bei der Album-Erkennung');
-            document.getElementById('saveProgressStatus').style.color = '#e74c3c';
-            setTimeout(() => progressController.hide(), 3000);
+            handleUniversalApiError(error, progressController, 'Album-Erkennung');
         }
 
         /* === EXTENDED METADATA SYSTEM ===
@@ -1082,59 +1249,16 @@
             }
         }
 
-        function showExtendedMetadataDialog(metadata) {
-            // Erstelle Modal-Dialog für Extended Metadata
-            const modal = document.createElement('div');
-            modal.id = 'extendedMetadataModal';
-            modal.innerHTML = `
-                <div class="modal-overlay">
-                    <div class="modal-content extended-metadata-modal">
-                        <div class="modal-header">
-                            <h3>🎯 Erweiterte Metadaten</h3>
-                            <button class="modal-close" onclick="closeExtendedMetadataDialog()">×</button>
-                        </div>
-                        <div class="modal-body">
-                            <div class="extended-metadata-list">
-                                ${Object.entries(metadata).map(([filepath, data]) => `
-                                    <div class="metadata-item">
-                                        <div class="metadata-header">
-                                            <h4>${data.title} - ${data.artist}</h4>
-                                            <small>Quellen: ${data.sources_used.join(', ')}</small>
-                                        </div>
-                                        <div class="metadata-details">
-                                            ${data.bpm ? `<span class="metadata-tag">BPM: ${Math.round(data.bpm)}</span>` : ''}
-                                            ${data.energy ? `<span class="metadata-tag">Energy: ${Math.round(data.energy * 100)}%</span>` : ''}
-                                            ${data.danceability ? `<span class="metadata-tag">Danceability: ${Math.round(data.danceability * 100)}%</span>` : ''}
-                                            ${data.valence ? `<span class="metadata-tag">Valence: ${Math.round(data.valence * 100)}%</span>` : ''}
-                                            ${data.genres && data.genres.length > 0 ? `<span class="metadata-tag">Genres: ${data.genres.slice(0, 3).join(', ')}</span>` : ''}
-                                            ${data.mood && data.mood.length > 0 ? `<span class="metadata-tag">Mood: ${data.mood.slice(0, 2).join(', ')}</span>` : ''}
-                                            ${data.similar_artists && data.similar_artists.length > 0 ? `<span class="metadata-tag">Ähnlich: ${data.similar_artists.slice(0, 2).join(', ')}</span>` : ''}
-                                        </div>
-                                    </div>
-                                `).join('')}
-                            </div>
-                        </div>
-                        <div class="modal-footer">
-                            <button class="btn btn-secondary" onclick="closeExtendedMetadataDialog()">Schließen</button>
-                            <button class="btn btn-primary" onclick="applyExtendedMetadata()">Metadaten anwenden</button>
-                        </div>
-                    </div>
-                </div>
-            `;
-            
-            document.body.appendChild(modal);
-            
-            // Store data for later use
-            window.extendedMetadataData = metadata;
-        }
-
+        /**
+         * Wendet Extended Metadata automatisch auf DOM-Elemente an
+         * @param {Object} metadata - Extended Metadata für alle Dateien
+         */
         function applyExtendedMetadataAutomatically(metadata) {
-            // Extended Metadata automatisch in die entsprechenden Tabellenzeilen integrieren
             Object.entries(metadata).forEach(([filepath, data]) => {
                 const row = document.querySelector(`[data-filepath="${filepath}"]`);
                 if (row) {
-                    // Extended Metadata als data-attributes speichern
-                    row.dataset.extendedMetadata = JSON.stringify({
+                    // Extended Metadata als JSON in data-attribute speichern
+                    const extendedData = {
                         bpm: data.bpm,
                         genres: data.genres || [],
                         mood: data.mood || [],
@@ -1146,70 +1270,148 @@
                         acousticness: data.acousticness,
                         release_date: data.release_date,
                         popularity: data.popularity
-                    });
+                    };
                     
-                    // Visuelle Markierung, dass Extended Metadata verfügbar sind
-                    const checkbox = row.querySelector('.select-checkbox');
-                    if (checkbox) {
-                        checkbox.style.borderColor = '#f39c12';
-                        checkbox.style.borderWidth = '2px';
-                        checkbox.title = 'Erweiterte Metadaten verfügbar - bereit zum Speichern';
-                    }
+                    row.dataset.extendedMetadata = JSON.stringify(extendedData);
+                    markRowWithExtendedMetadata(row);
                 }
             });
         }
 
-        function applyExtendedMetadata() {
-            if (!window.extendedMetadataData) {
-                showUserMessage('Keine Extended Metadata verfügbar.', 'warning');
-                return;
+        /**
+         * Markiert eine Tabellenzeile als erweiterte Metadaten verfügbar
+         * @param {HTMLElement} row - Die Tabellenzeile
+         */
+        function markRowWithExtendedMetadata(row) {
+            const checkbox = row.querySelector('.file-checkbox');
+            if (checkbox) {
+                checkbox.style.borderColor = '#f39c12';
+                checkbox.style.borderWidth = '2px';
+                checkbox.title = 'Erweiterte Metadaten verfügbar - bereit zum Speichern';
             }
-            
-            // Extended Metadata in die entsprechenden Tabellenzeilen integrieren
-            Object.entries(window.extendedMetadataData).forEach(([filepath, data]) => {
-                const row = document.querySelector(`[data-filepath="${filepath}"]`);
-                if (row) {
-                    // Extended Metadata als data-attributes speichern
-                    row.dataset.extendedMetadata = JSON.stringify({
-                        bpm: data.bpm,
-                        genres: data.genres || [],
-                        mood: data.mood || [],
-                        similar_artists: data.similar_artists || [],
-                        tags: data.tags || [],
-                        energy: data.energy,
-                        danceability: data.danceability,
-                        valence: data.valence,
-                        acousticness: data.acousticness,
-                        release_date: data.release_date,
-                        popularity: data.popularity
-                    });
-                    
-                    // Visuelle Markierung, dass Extended Metadata verfügbar sind
-                    const checkbox = row.querySelector('.select-checkbox');
-                    if (checkbox) {
-                        checkbox.style.borderColor = '#f39c12';
-                        checkbox.title = 'Erweiterte Metadaten verfügbar';
-                    }
-                }
-            });
-            
-            showUserMessage('Extended Metadata wurden angewendet und stehen zum Speichern bereit!', 'success', 4000);
-            closeExtendedMetadataDialog();
-        }
-
-        function closeExtendedMetadataDialog() {
-            const modal = document.getElementById('extendedMetadataModal');
-            if (modal) {
-                modal.remove();
-            }
-            delete window.extendedMetadataData;
         }
 
         function handleExtendedMetadataError(error, progressController) {
-            handleApiError(error, 'Erweiterte Metadaten-Sammlung');
-            progressController.updateProgress(100, '', '❌ Fehler bei erweiterten Metadaten');
-            document.getElementById('saveProgressStatus').style.color = '#e74c3c';
-            setTimeout(() => progressController.hide(), 3000);
+            handleUniversalApiError(error, progressController, 'Erweiterte Metadaten-Sammlung');
+        }
+
+        /* === CLEAR TAGS SYSTEM ===
+         * Löscht alle ID3-Tags der ausgewählten Dateien mit Sicherheitsabfrage
+         */
+        function initializeClearTags() {
+            const clearTagsBtn = document.getElementById('clearTagsBtn');
+            if (clearTagsBtn) {
+                clearTagsBtn.addEventListener('click', performClearTags);
+            }
+        }
+
+        function performClearTags() {
+            const selectedFilePaths = Array.from(selectedFiles);
+            
+            if (selectedFilePaths.length === 0) {
+                showUserMessage('Bitte wählen Sie mindestens eine Datei aus, deren Tags gelöscht werden sollen.', 'warning');
+                return;
+            }
+
+            // Erweiterte Sicherheitsabfrage
+            const fileCount = selectedFilePaths.length;
+            const fileList = selectedFilePaths.map(path => `• ${path.split('/').pop()}`).slice(0, 5).join('\n');
+            const remainingCount = fileCount > 5 ? `\n... und ${fileCount - 5} weitere Dateien` : '';
+            
+            const confirmMessage = `⚠️ WARNUNG: Alle ID3-Tags löschen
+            
+Diese Aktion wird ALLE ID3-Tags (Titel, Artist, Album, Jahr, Genre, etc.) der folgenden ${fileCount} Datei(en) UNWIDERRUFLICH löschen:
+
+${fileList}${remainingCount}
+
+Diese Aktion kann NICHT rückgängig gemacht werden!
+
+Möchten Sie wirklich fortfahren?`;
+
+            if (!confirm(confirmMessage)) {
+                return;
+            }
+
+            // Zweite Bestätigung für kritische Aktion
+            if (!confirm('Sind Sie ABSOLUT SICHER? Alle Tags werden unwiderruflich gelöscht!')) {
+                return;
+            }
+
+            const clearTagsBtn = document.getElementById('clearTagsBtn');
+            clearTagsBtn.disabled = true;
+            clearTagsBtn.innerHTML = '🗑️ Lösche Tags...';
+
+            // Progress-System für Tag-Löschung
+            const progressController = createUniversalProgressController({
+                title: '🗑️ Lösche ID3-Tags...'
+            });
+            progressController.show();
+            progressController.updateProgress(0, `Lösche Tags von ${fileCount} Dateien...`);
+
+            makeApiCall('/api/clear-tags', {
+                method: 'POST',
+                body: JSON.stringify({
+                    file_paths: selectedFilePaths
+                })
+            })
+            .then(data => handleClearTagsResponse(data, progressController))
+            .catch(error => handleClearTagsError(error, progressController))
+            .finally(() => {
+                clearTagsBtn.disabled = false;
+                clearTagsBtn.innerHTML = '🗑️ Tags löschen';
+            });
+        }
+
+        function handleClearTagsResponse(data, progressController) {
+            progressController.updateProgress(100, '');
+            
+            if (data.success) {
+                const clearedCount = data.cleared_count || 0;
+                const statusText = `✅ ID3-Tags von ${clearedCount} Dateien erfolgreich gelöscht!`;
+                progressController.updateProgress(100, '', statusText);
+                
+                // UI aktualisieren: Input-Felder leeren
+                data.cleared_files?.forEach(filepath => {
+                    clearFileFieldsInUI(filepath);
+                });
+                
+                setTimeout(() => {
+                    progressController.hide();
+                    showUserMessage(`ID3-Tags von ${clearedCount} Dateien gelöscht. Seite wird neu geladen...`, 'success');
+                    
+                    // Seite nach kurzer Verzögerung neu laden
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 2000);
+                }, 2000);
+            } else {
+                progressController.updateProgress(100, '', `❌ ${data.message}`);
+                setTimeout(() => progressController.hide(), 3000);
+            }
+        }
+
+        function clearFileFieldsInUI(filepath) {
+            const row = document.querySelector(`[data-filepath="${filepath}"]`);
+            if (row) {
+                // Alle Input-Felder leeren
+                const inputs = row.querySelectorAll('input[type="text"]');
+                inputs.forEach(input => {
+                    input.value = '';
+                    input.style.backgroundColor = '#ffe6e6'; // Rötlicher Hintergrund
+                    input.title = 'Tags wurden gelöscht';
+                });
+                
+                // Cover-Status auf "Nein" setzen
+                const coverCell = row.querySelector('.cover-status');
+                if (coverCell) {
+                    coverCell.textContent = 'Nein';
+                    coverCell.className = 'cover-status cover-none';
+                }
+            }
+        }
+
+        function handleClearTagsError(error, progressController) {
+            handleUniversalApiError(error, progressController, 'Tag-Löschung');
         }
     </script>
 </body>

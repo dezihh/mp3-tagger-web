@@ -96,7 +96,20 @@ function updateRecognizedField(row, selector, value, source, fieldType = 'audio'
     const className = fieldType === 'album' ? 'album-recognized-field' : 'recognized-field';
     const title = fieldType === 'album' ? `Erkannt als Album-Metadaten` : `Erkannt via ${source}`;
     
-    return updateInputField(row, selector, value, className, title);
+    const input = row.querySelector(selector);
+    if (input && value) {
+        input.value = value;
+        if (className) input.classList.add(className);
+        if (title) input.setAttribute('title', title);
+        
+        // Wichtig: data-recognized Attribut setzen für Frontend-Override System
+        input.setAttribute('data-recognized', 'true');
+        input.setAttribute('data-source', source || 'unknown');
+        input.setAttribute('data-field-type', fieldType);
+        
+        return true;
+    }
+    return false;
 }
 
 /* === VALIDATION UTILITIES === */

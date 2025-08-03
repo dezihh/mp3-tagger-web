@@ -171,8 +171,8 @@ class AudioRecognitionService:
         try:
             shazam = Shazam()
             
-            # Shazam-Erkennung durchführen
-            recognition_result = await shazam.recognize_song(file_path)
+            # Shazam-Erkennung durchführen (verwende neue Methode)
+            recognition_result = await shazam.recognize(file_path)
             
             if recognition_result and 'track' in recognition_result:
                 track = recognition_result['track']

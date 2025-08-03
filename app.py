@@ -276,13 +276,13 @@ def audio_recognition():
     try:
         data = request.get_json()
         
-        if not data or 'filepath' not in data:
+        if not data or ('filepath' not in data and 'file_path' not in data):
             return jsonify({
                 'success': False,
                 'message': 'Dateipfad erforderlich'
             })
         
-        file_path = data['filepath']
+        file_path = data.get('filepath') or data.get('file_path')
         
         # Prüfen ob Datei existiert
         if not os.path.isfile(file_path) or not is_mp3_file(file_path):
@@ -343,7 +343,18 @@ def batch_audio_recognition():
         
         # Verzeichnis scannen
         grouped_files = scan_mp3_directory(mp3_dir)
-        files_needing_recognition = get_files_needing_recognition(grouped_files)
+        
+        # Prüfen ob manuelle Erkennung angefordert wird
+        force_recognition = data.get('force_recognition', False)
+        
+        if force_recognition:
+            # Alle MP3-Dateien für manuelle Erkennung
+            files_needing_recognition = []
+            for files in grouped_files.values():
+                files_needing_recognition.extend(files)
+        else:
+            # Nur Dateien ohne Tags
+            files_needing_recognition = get_files_needing_recognition(grouped_files)
         
         if not files_needing_recognition:
             return jsonify({
@@ -484,9 +495,11 @@ def album_recognition():
         
         directory = data['directory']
         selected_files = data.get('selected_files', [])
+        frontend_overrides = data.get('frontend_overrides', {})  # Neue Frontend-Daten
         
         print(f"Album-Erkennung für Verzeichnis: {directory}")
         print(f"Ausgewählte Dateien: {len(selected_files)}")
+        print(f"Frontend-Overrides: {len(frontend_overrides)} Dateien")
         
         if not os.path.exists(directory):
             return jsonify({
@@ -503,6 +516,9 @@ def album_recognition():
         # Nur ausgewählte Dateien verwenden, falls angegeben
         if selected_files:
             all_files = [f for f in all_files if f.full_path in selected_files]
+        
+        # Frontend-Overrides auf MP3FileInfo-Objekte anwenden
+        apply_frontend_overrides(all_files, frontend_overrides)
         
         if not all_files:
             return jsonify({
@@ -576,6 +592,7 @@ def apply_album():
         directory = data.get('directory')
         selected_files = data.get('selected_files', [])
         album_data = data.get('album_data')
+        frontend_overrides = data.get('frontend_overrides', {})  # WICHTIG: Frontend-Overrides auch hier beachten
         
         if not all([directory, album_data]):
             return jsonify({
@@ -584,6 +601,7 @@ def apply_album():
             })
         
         print(f"Album-Daten anwenden für Verzeichnis: {directory}")
+        print(f"Frontend-Overrides in apply_album: {len(frontend_overrides)} Dateien")
         
         # MP3-Dateien scannen
         grouped_files = scan_mp3_directory(directory)
@@ -594,6 +612,9 @@ def apply_album():
         # Nur ausgewählte Dateien verwenden, falls angegeben
         if selected_files:
             all_files = [f for f in all_files if f.full_path in selected_files]
+        
+        # WICHTIG: Frontend-Overrides VOR Track-Matching anwenden
+        apply_frontend_overrides(all_files, frontend_overrides)
         
         # Album-Daten auf Dateien anwenden
         applied_files = []
@@ -633,6 +654,8 @@ def apply_album():
                 
                 applied_files.append({
                     'filename': mp3_file.filename,
+                    'title': mp3_file.title,  # Titel mit einbeziehen
+                    'artist': mp3_file.artist,  # Artist mit einbeziehen
                     'album': mp3_file.album,
                     'year': mp3_file.year,
                     'track_number': mp3_file.track_number
@@ -683,7 +706,8 @@ def get_extended_metadata():
         # Für jede ausgewählte Datei Metadaten sammeln
         for filepath in selected_files:
             try:
-                full_path = os.path.join(mp3_dir, os.path.basename(filepath))
+                # filepath ist bereits der vollständige Pfad
+                full_path = filepath
                 
                 # MP3-Datei-Info laden für Artist/Title
                 from tagger.mp3_processor import MP3FileInfo
@@ -779,6 +803,144 @@ def get_extended_metadata():
             'success': False,
             'message': f'Fehler beim Sammeln erweiterter Metadaten: {str(e)}'
         })
+
+
+@app.route('/api/clear-tags', methods=['POST'])
+def clear_tags():
+    """
+    API-Endpoint zum Löschen aller ID3-Tags von ausgewählten Dateien.
+    
+    Expected JSON:
+    {
+        "file_paths": ["/path/to/file1.mp3", "/path/to/file2.mp3"]
+    }
+    
+    Returns:
+        JSON mit Löschungsergebnissen
+    """
+    try:
+        data = request.get_json()
+        
+        if not data or 'file_paths' not in data:
+            return jsonify({
+                'success': False,
+                'message': 'Dateipfade erforderlich'
+            })
+        
+        file_paths = data['file_paths']
+        
+        if not file_paths:
+            return jsonify({
+                'success': False,
+                'message': 'Keine Dateien zum Löschen ausgewählt'
+            })
+        
+        cleared_files = []
+        failed_files = []
+        
+        for file_path in file_paths:
+            try:
+                # Prüfen ob Datei existiert
+                if not os.path.isfile(file_path) or not is_mp3_file(file_path):
+                    failed_files.append({
+                        'file': file_path,
+                        'error': 'Datei nicht gefunden oder keine MP3-Datei'
+                    })
+                    continue
+                
+                # ID3-Tags löschen
+                clear_id3_tags(file_path)
+                cleared_files.append(file_path)
+                print(f"✅ ID3-Tags gelöscht: {os.path.basename(file_path)}")
+                
+            except Exception as e:
+                failed_files.append({
+                    'file': file_path,
+                    'error': str(e)
+                })
+                print(f"❌ Fehler beim Löschen der Tags von {os.path.basename(file_path)}: {str(e)}")
+        
+        return jsonify({
+            'success': True,
+            'cleared_count': len(cleared_files),
+            'failed_count': len(failed_files),
+            'cleared_files': cleared_files,
+            'failed_files': failed_files,
+            'message': f'{len(cleared_files)} von {len(file_paths)} Dateien erfolgreich bearbeitet'
+        })
+        
+    except Exception as e:
+        print(f"💥 Fehler bei clear tags: {str(e)}")
+        return jsonify({
+            'success': False,
+            'message': f'Fehler beim Löschen der Tags: {str(e)}'
+        })
+
+
+def clear_id3_tags(file_path: str):
+    """
+    Löscht alle ID3-Tags einer MP3-Datei.
+    
+    Args:
+        file_path: Pfad zur MP3-Datei
+        
+    Raises:
+        Exception: Bei Fehlern beim Löschen
+    """
+    from mutagen.mp3 import MP3
+    from mutagen.id3 import ID3NoHeaderError
+    
+    try:
+        # MP3-Datei laden
+        audio = MP3(file_path)
+        
+        # Alle Tags löschen
+        if audio.tags:
+            audio.delete()  # Löscht alle ID3-Tags
+            audio.save()    # Speichert die Änderungen
+        else:
+            print(f"ℹ️ Keine ID3-Tags gefunden in: {os.path.basename(file_path)}")
+            
+    except ID3NoHeaderError:
+        print(f"ℹ️ Keine ID3-Header gefunden in: {os.path.basename(file_path)}")
+    except Exception as e:
+        raise Exception(f"Fehler beim Löschen der ID3-Tags: {str(e)}")
+
+
+def apply_frontend_overrides(mp3_files, frontend_overrides):
+    """
+    Wendet Frontend-Override-Daten auf MP3FileInfo-Objekte an.
+    
+    Args:
+        mp3_files: Liste von MP3FileInfo-Objekten
+        frontend_overrides: Dictionary mit Frontend-Daten per Dateipfad
+    """
+    if not frontend_overrides:
+        return
+    
+    applied_count = 0
+    for mp3_file in mp3_files:
+        if mp3_file.full_path in frontend_overrides:
+            override_data = frontend_overrides[mp3_file.full_path]
+            
+            # Titel aus Frontend übernehmen
+            if 'title' in override_data:
+                old_title = mp3_file.title
+                mp3_file.title = override_data['title']
+                mp3_file.title_source = override_data.get('title_source', 'frontend')
+                print(f"🔧 Frontend-Override Titel: '{old_title}' → '{mp3_file.title}' ({mp3_file.title_source})")
+            
+            # Artist aus Frontend übernehmen
+            if 'artist' in override_data:
+                old_artist = mp3_file.artist
+                mp3_file.artist = override_data['artist']
+                mp3_file.artist_source = override_data.get('artist_source', 'frontend')
+                print(f"🔧 Frontend-Override Artist: '{old_artist}' → '{mp3_file.artist}' ({mp3_file.artist_source})")
+            
+            applied_count += 1
+    
+    if applied_count > 0:
+        print(f"✅ Frontend-Overrides angewendet auf {applied_count} Dateien")
 
 
 if __name__ == '__main__':
