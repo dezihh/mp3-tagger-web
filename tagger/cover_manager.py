@@ -229,7 +229,7 @@ class CoverManager:
         return external_covers
     
     def _extract_url_covers(self, mp3_files: List[Path]) -> List[CoverSource]:
-        """Extrahiert URL-basierte Cover aus MP3-Metadaten."""
+        """Extrahiert URL-basierte Cover aus MP3-Metadaten mit Preview-Download."""
         url_covers = []
         processed_urls = set()
         
@@ -237,41 +237,116 @@ class CoverManager:
             try:
                 audio = MP3(mp3_file)
                 if audio.tags:
-                    # Suche nach URL-Tags (TXXX, COMM, etc.)
-                    for tag in audio.tags.values():
-                        if hasattr(tag, 'desc') and hasattr(tag, 'text'):
-                            # TXXX-Tags nach Cover-URLs durchsuchen
-                            if 'cover' in str(tag.desc).lower() or 'image' in str(tag.desc).lower():
-                                url = str(tag.text[0]) if tag.text else ''
-                                if url.startswith('http') and url not in processed_urls:
-                                    # URL-Cover-Info erstellen (ohne Download für Performance)
-                                    url_covers.append(CoverSource(
-                                        type='url',
-                                        path=url,
-                                        size=(0, 0),  # Unbekannt bis zum Download
-                                        format='JPEG',  # Annahme
-                                        hash=hashlib.md5(url.encode()).hexdigest(),
-                                        usage_count=0,
-                                        preview_data=None  # Wird bei Bedarf geladen
-                                    ))
-                                    processed_urls.add(url)
+                    # Suche nach URL-Tags in TXXX-Tags
+                    for tag_key, tag_value in audio.tags.items():
+                        if tag_key.startswith('TXXX:') and hasattr(tag_value, 'desc') and hasattr(tag_value, 'text'):
+                            desc = str(tag_value.desc).upper()
+                            # Erweiterte Suche nach Cover-URL-Tags
+                            if any(keyword in desc for keyword in ['COVER_URL', 'COVER_STATUS', 'COVER_URLS', 'IMAGE', 'ARTWORK']):
+                                text_value = str(tag_value.text[0]) if tag_value.text else ''
+                                
+                                # Einzelne URL extrahieren
+                                if text_value.startswith('http') and text_value not in processed_urls:
+                                    cover_source = self._create_url_cover_source(text_value, desc)
+                                    if cover_source:
+                                        url_covers.append(cover_source)
+                                        processed_urls.add(text_value)
+                                
+                                # JSON-URLs parsen (für COVER_URLS)
+                                elif desc == 'COVER_URLS' and text_value:
+                                    try:
+                                        import json
+                                        cover_urls = json.loads(text_value)
+                                        for size_key, url in cover_urls.items():
+                                            if url.startswith('http') and url not in processed_urls:
+                                                cover_source = self._create_url_cover_source(url, f"{desc}_{size_key}")
+                                                if cover_source:
+                                                    url_covers.append(cover_source)
+                                                    processed_urls.add(url)
+                                    except (json.JSONDecodeError, AttributeError):
+                                        pass
+                                        
             except Exception as e:
                 print(f"Fehler beim Extrahieren der URL-Cover von {mp3_file}: {e}")
         
         return url_covers
     
+    def _create_url_cover_source(self, url: str, source_desc: str) -> Optional[CoverSource]:
+        """Erstellt ein CoverSource-Objekt für eine URL mit Preview-Download."""
+        try:
+            # URL-Preview herunterladen (mit Timeout und Größenlimit)
+            response = requests.get(url, timeout=10, stream=True)
+            response.raise_for_status()
+            
+            # Content-Length prüfen (max 5MB)
+            content_length = response.headers.get('content-length')
+            if content_length and int(content_length) > 5 * 1024 * 1024:
+                print(f"URL-Cover zu groß übersprungen: {url}")
+                return None
+            
+            # Bild-Daten laden (mit Limit)
+            image_data = b''
+            for chunk in response.iter_content(chunk_size=8192):
+                image_data += chunk
+                if len(image_data) > 5 * 1024 * 1024:  # 5MB Limit
+                    print(f"URL-Cover zu groß übersprungen: {url}")
+                    return None
+            
+            # Bild analysieren
+            with Image.open(io.BytesIO(image_data)) as img:
+                size = img.size
+                format_name = img.format or 'JPEG'
+                
+                # Hash für Duplikat-Erkennung
+                image_hash = hashlib.md5(image_data).hexdigest()
+                
+                # Thumbnail für Preview erstellen
+                thumbnail = img.copy()
+                thumbnail.thumbnail((100, 100), Image.Resampling.LANCZOS)
+                thumb_io = io.BytesIO()
+                thumbnail.save(thumb_io, format='JPEG', quality=85)
+                
+                return CoverSource(
+                    type='url',
+                    path=url,
+                    size=size,
+                    format=format_name,
+                    hash=image_hash,
+                    usage_count=0,
+                    preview_data=thumb_io.getvalue()
+                )
+                
+        except Exception as e:
+            print(f"Fehler beim Laden des URL-Covers {url}: {e}")
+            # Keine Cover-Source für fehlerhafte URLs erstellen
+            return None
+        
+        return None
+    
     def _deduplicate_covers(self, cover_sources: List[CoverSource]) -> List[CoverSource]:
-        """Entfernt Duplikate basierend auf Bild-Hash."""
+        """Entfernt Duplikate intelligenter basierend auf Bild-Hash und Qualität."""
         unique_covers = {}
         
         for cover in cover_sources:
             if cover.hash not in unique_covers:
                 unique_covers[cover.hash] = cover
             else:
-                # Bei Duplikaten: Bevorzuge interne Cover, dann externe, dann URLs
+                # Bei Duplikaten: Intelligente Auswahl des besten Covers
                 existing = unique_covers[cover.hash]
-                if (cover.type == 'internal' and existing.type != 'internal') or \
-                   (cover.type == 'external' and existing.type == 'url'):
+                
+                # Prioritätsregeln (höhere Zahl = höhere Priorität):
+                # 1. Type-Priorität: internal > external > url
+                # 2. Größen-Priorität: Größere Auflösung bevorzugt
+                # 3. Preview-Verfügbarkeit: Mit Preview bevorzugt
+                
+                def get_priority_score(cover_item):
+                    type_score = {'internal': 3, 'external': 2, 'url': 1}.get(cover_item.type, 0)
+                    size_score = cover_item.size[0] * cover_item.size[1] / 1000  # Normalisiert
+                    preview_score = 1 if cover_item.preview_data else 0
+                    return type_score * 100 + size_score + preview_score
+                
+                # Ersetze nur wenn das neue Cover besser ist
+                if get_priority_score(cover) > get_priority_score(existing):
                     unique_covers[cover.hash] = cover
         
         return list(unique_covers.values())

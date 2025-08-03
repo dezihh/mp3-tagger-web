@@ -79,7 +79,9 @@
                         <span class="checkmark"></span>
                         Alle in diesem Ordner ({{ files|length }})
                     </label>
-                    <button class="btn btn-sm btn-info cover-management-btn" title="Cover-Management für dieses Verzeichnis">
+                    <button class="btn btn-sm btn-info cover-management-btn" 
+                            data-directory="{{ directory }}"
+                            title="Cover-Management für dieses Verzeichnis">
                         🖼️ Cover verwalten
                     </button>
                 </div>
@@ -1822,24 +1824,29 @@ Möchten Sie wirklich fortfahren?`;
                 // Event-Listener für jeden Verzeichnis-spezifischen Cover-Button
                 document.addEventListener('click', (event) => {
                     if (event.target.classList.contains('cover-management-btn')) {
-                        const directoryGroup = event.target.closest('.directory-group');
-                        if (directoryGroup) {
-                            // Extrahiere Base-Verzeichnis aus URL-Parameter (das ist bereits der vollständige Pfad!)
-                            const urlParams = new URLSearchParams(window.location.search);
-                            const baseDirectory = urlParams.get('mp3_dir');
-                            
-                            if (!baseDirectory) {
-                                console.error('❌ Base-Verzeichnis nicht in URL gefunden');
-                                return;
-                            }
-                            
-                            // Der URL-Parameter enthält bereits den vollständigen Pfad zum Verzeichnis
-                            // Wir müssen NICHT den relativen Pfad anhängen
-                            this.currentDirectory = baseDirectory;
-                            
-                            console.log('🎯 Cover-Management für Verzeichnis:', this.currentDirectory);
-                            this.openCoverManagement();
+                        // Hole das relative Verzeichnis aus dem data-directory Attribut
+                        const relativeDirectory = event.target.getAttribute('data-directory');
+                        
+                        if (!relativeDirectory) {
+                            console.error('❌ Verzeichnis nicht in data-directory gefunden');
+                            return;
                         }
+                        
+                        // Hole das Base-Verzeichnis aus den URL-Parametern
+                        const urlParams = new URLSearchParams(window.location.search);
+                        const baseDirectory = urlParams.get('mp3_dir');
+                        
+                        if (!baseDirectory) {
+                            console.error('❌ Base-Verzeichnis nicht in URL gefunden');
+                            return;
+                        }
+                        
+                        // Konstruiere den vollständigen Pfad
+                        const fullPath = `${baseDirectory}/${relativeDirectory}`;
+                        this.currentDirectory = fullPath;
+                        
+                        console.log('🎯 Cover-Management für vollständigen Pfad:', this.currentDirectory);
+                        this.openCoverManagement();
                     }
                 });
             }
@@ -1992,6 +1999,11 @@ Möchten Sie wirklich fortfahren?`;
                     const sizeText = cover.size.width > 0 ? 
                         `${cover.size.width}×${cover.size.height}px` : 'Unbekannt';
 
+                    // URL-Pfad für URL-Cover kürzen und anzeigen
+                    const pathDisplay = cover.type === 'url' ? 
+                        (cover.path.length > 60 ? cover.path.substring(0, 57) + '...' : cover.path) :
+                        cover.path.split('/').pop(); // Nur Dateiname für lokale Dateien
+
                     return `
                         <div class="cover-source-item" data-hash="${cover.hash}">
                             <div class="cover-preview">
@@ -2005,6 +2017,10 @@ Möchten Sie wirklich fortfahren?`;
                                 <div class="cover-size">${sizeText}</div>
                                 <div class="cover-usage">✅ ${cover.usage_count}x verwendet</div>
                                 <div class="cover-format">${cover.format}</div>
+                                ${cover.type === 'url' ? 
+                                    `<div class="cover-url" title="${cover.path}">🔗 ${pathDisplay}</div>` : 
+                                    `<div class="cover-path">📁 ${pathDisplay}</div>`
+                                }
                             </div>
                             <div class="cover-actions">
                                 <select class="size-selector">

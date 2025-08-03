@@ -1537,6 +1537,19 @@ button:hover {
     font-size: 0.9rem;
 }
 
+.cover-url, .cover-path {
+    color: #007bff;
+    font-size: 0.8rem;
+    word-break: break-all;
+    line-height: 1.2;
+    max-width: 200px;
+    margin: 0 auto;
+}
+
+.cover-url {
+    cursor: help;
+}
+
 .cover-format {
     color: #6c757d;
     font-size: 0.8rem;
