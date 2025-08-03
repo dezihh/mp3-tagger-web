@@ -1,6 +1,6 @@
-🎯 TOOLTIP-SYSTEM VERBESSERUNGEN ABGESCHLOSSEN
+🎯 STATUS: EXTENDED METADATA SPEICHER-PROBLEM BEHOBEN! ✅
 
-## Was wurde repariert:
+## Was ist repariert:
 
 ### 1. **Hover-Positionierung bei Dateien am unteren Rand**
 - ✅ Verbesserte `updateTooltipPosition()` Funktion 
@@ -21,10 +21,40 @@
 - ✅ Benutzerfreundliche Formatierung und Icons
 - ✅ Limitierung der angezeigten Items für bessere Lesbarkeit
 
-### 3. **Mobile Responsivität**
-- ✅ Tooltip-Anpassungen für kleinere Bildschirme
-- ✅ Spalten-Layout wird auf mobilen Geräten gestapelt
-- ✅ Schriftgröße und Abstände optimiert
+### 3. **Cover-Erkennung**
+- ✅ Externe Cover-Dateien werden jetzt erkannt
+- ✅ Base64-Thumbnails für externe Cover generiert
+
+### 4. **Extended Metadata Speicher-Workflow** ✅ BEHOBEN!
+- ✅ **API funktioniert:** Extended Metadata werden erfolgreich abgerufen
+- ✅ **Backend funktioniert:** `save_mp3_tags()` kann Extended Metadata speichern
+- ✅ **Frontend REPARIERT:** `collectFilesToSave()` sammelt jetzt Extended Metadata
+- ✅ **Vollständige Übertragung:** Extended Metadata werden jetzt korrekt gespeichert
+
+### Frontend-Korrekturen:
+1. **`applyExtendedMetadata()` implementiert:** Speichert Extended Metadata als `data-extended-metadata` in DOM-Elementen
+2. **`collectFilesToSave()` erweitert:** Sammelt Extended Metadata beim Speichern mit
+3. **Visuelle Markierung:** Checkboxen werden orange markiert, wenn Extended Metadata verfügbar sind
+
+## VOLLSTÄNDIGER WORKFLOW JETZT OPTIMIERT:
+
+### 🎯 Vereinfachter Erweiterte Metadaten Workflow:
+1. ✅ **Datei auswählen** in der Tabelle
+2. ✅ **"Erweiterte Metadaten" Button** drücken
+3. ✅ **APIs sammeln Daten** von Last.fm & Spotify
+4. ✅ **Extended Metadata werden automatisch angewendet** (keine Zwischenschritte!)
+5. ✅ **"Dateien speichern"** schreibt Extended Metadata in MP3
+6. ✅ **Hover-Tooltip** zeigt Extended Metadata an
+
+### 🔄 **Entfernte Zwischenschritte:**
+- ❌ Dialog "Erweiterte Metadaten anzeigen"
+- ❌ Button "Metadaten anwenden"
+
+### 🎉 **Verbesserungen:**
+- ✅ Weniger Klicks für den Benutzer
+- ✅ Direkter Workflow ohne Zwischenschritte  
+- ✅ Extended Metadata werden sofort bereitgestellt
+- ✅ Speichern erfolgt in einem Schritt
 
 ## Testergebnis für ohne_id3_2.mp3:
 ✅ **Basis-Tags:** Titel, Artist, Album

@@ -1,5 +1,17 @@
 [
   {
+    "path": "/home/dezi/tmp/mp3-tagger-web/test_music",
+    "display_name": "mp3-tagger-web/test_music",
+    "timestamp": "2025-08-03T10:05:31.649586",
+    "mp3_count": 11
+  },
+  {
+    "path": "/mnt/cifs/storage.ziegler-eu.de/music/Tears for Fears/Gold",
+    "display_name": "Tears for Fears/Gold",
+    "timestamp": "2025-08-03T09:50:58.322909",
+    "mp3_count": 24
+  },
+  {
     "path": "/mnt/cifs/storage.ziegler-eu.de/music/_Thomas_N/Music/B.B.King",
     "display_name": "Music/B.B.King",
     "timestamp": "2025-08-02T21:05:18.026817",
@@ -10,18 +22,6 @@
     "display_name": "storage.ziegler-eu.de/music",
     "timestamp": "2025-08-02T20:53:08.805940",
     "mp3_count": 38033
-  },
-  {
-    "path": "/mnt/cifs/storage.ziegler-eu.de/music/Tears for Fears/Gold",
-    "display_name": "Tears for Fears/Gold",
-    "timestamp": "2025-08-02T20:39:17.974697",
-    "mp3_count": 24
-  },
-  {
-    "path": "/home/dezi/tmp/mp3-tagger-web/test_music",
-    "display_name": "mp3-tagger-web/test_music",
-    "timestamp": "2025-08-02T20:30:20.522625",
-    "mp3_count": 11
   },
   {
     "path": "/mnt/cifs/storage.ziegler-eu.de/music/Zuccero",

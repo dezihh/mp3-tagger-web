@@ -589,6 +589,17 @@
                         genre: row.querySelector('.genre-input')?.value || ''
                     };
                     
+                    // Extended Metadata hinzufügen, falls verfügbar
+                    const extendedDataAttr = row.dataset.extendedMetadata;
+                    if (extendedDataAttr) {
+                        try {
+                            const extendedData = JSON.parse(extendedDataAttr);
+                            tags.extended_metadata = extendedData;
+                        } catch (e) {
+                            console.warn('Fehler beim Parsen der Extended Metadata:', e);
+                        }
+                    }
+                    
                     filesToSave.push({ filepath, tags });
                 }
             });
@@ -1062,9 +1073,9 @@
                     return;
                 }
                 
-                // Extended Metadata-Dialog anzeigen
-                showExtendedMetadataDialog(metadata);
-                showUserMessage(`Erweiterte Metadaten für ${processedCount} Dateien gesammelt!`, 'success', 4000);
+                // Extended Metadata automatisch anwenden (ohne Dialog)
+                applyExtendedMetadataAutomatically(metadata);
+                showUserMessage(`Erweiterte Metadaten für ${processedCount} Dateien gesammelt und bereit zum Speichern!`, 'success', 4000);
                 
             } else {
                 showUserMessage(`Fehler beim Sammeln erweiterter Metadaten: ${data.message}`, 'error');
@@ -1117,10 +1128,72 @@
             window.extendedMetadataData = metadata;
         }
 
+        function applyExtendedMetadataAutomatically(metadata) {
+            // Extended Metadata automatisch in die entsprechenden Tabellenzeilen integrieren
+            Object.entries(metadata).forEach(([filepath, data]) => {
+                const row = document.querySelector(`[data-filepath="${filepath}"]`);
+                if (row) {
+                    // Extended Metadata als data-attributes speichern
+                    row.dataset.extendedMetadata = JSON.stringify({
+                        bpm: data.bpm,
+                        genres: data.genres || [],
+                        mood: data.mood || [],
+                        similar_artists: data.similar_artists || [],
+                        tags: data.tags || [],
+                        energy: data.energy,
+                        danceability: data.danceability,
+                        valence: data.valence,
+                        acousticness: data.acousticness,
+                        release_date: data.release_date,
+                        popularity: data.popularity
+                    });
+                    
+                    // Visuelle Markierung, dass Extended Metadata verfügbar sind
+                    const checkbox = row.querySelector('.select-checkbox');
+                    if (checkbox) {
+                        checkbox.style.borderColor = '#f39c12';
+                        checkbox.style.borderWidth = '2px';
+                        checkbox.title = 'Erweiterte Metadaten verfügbar - bereit zum Speichern';
+                    }
+                }
+            });
+        }
+
         function applyExtendedMetadata() {
-            // Hier könnte man die erweiterten Metadaten in die MP3-Dateien schreiben
-            // Für jetzt zeigen wir nur eine Erfolgsmeldung
-            showUserMessage('Extended Metadata-Speicherung noch nicht implementiert. Die Daten wurden gesammelt und angezeigt.', 'info', 6000);
+            if (!window.extendedMetadataData) {
+                showUserMessage('Keine Extended Metadata verfügbar.', 'warning');
+                return;
+            }
+            
+            // Extended Metadata in die entsprechenden Tabellenzeilen integrieren
+            Object.entries(window.extendedMetadataData).forEach(([filepath, data]) => {
+                const row = document.querySelector(`[data-filepath="${filepath}"]`);
+                if (row) {
+                    // Extended Metadata als data-attributes speichern
+                    row.dataset.extendedMetadata = JSON.stringify({
+                        bpm: data.bpm,
+                        genres: data.genres || [],
+                        mood: data.mood || [],
+                        similar_artists: data.similar_artists || [],
+                        tags: data.tags || [],
+                        energy: data.energy,
+                        danceability: data.danceability,
+                        valence: data.valence,
+                        acousticness: data.acousticness,
+                        release_date: data.release_date,
+                        popularity: data.popularity
+                    });
+                    
+                    // Visuelle Markierung, dass Extended Metadata verfügbar sind
+                    const checkbox = row.querySelector('.select-checkbox');
+                    if (checkbox) {
+                        checkbox.style.borderColor = '#f39c12';
+                        checkbox.title = 'Erweiterte Metadaten verfügbar';
+                    }
+                }
+            });
+            
+            showUserMessage('Extended Metadata wurden angewendet und stehen zum Speichern bereit!', 'success', 4000);
             closeExtendedMetadataDialog();
         }
 
