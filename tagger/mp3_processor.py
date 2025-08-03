@@ -165,6 +165,16 @@ class MP3FileInfo:
                 self.year = str(audio['TDRC'][0])
             elif 'TYER' in audio:  # ID3v2.3
                 self.year = str(audio['TYER'][0])
+            else:
+                # Fallback: Jahr aus TXXX:RELEASE_DATE extrahieren
+                for tag_name, tag_value in audio.items():
+                    if tag_name.startswith('TXXX:') and 'RELEASE_DATE' in tag_name:
+                        release_date = str(tag_value[0])
+                        # Jahr aus Datum extrahieren (YYYY-MM-DD -> YYYY)
+                        if len(release_date) >= 4 and release_date[:4].isdigit():
+                            self.year = release_date[:4]
+                            print(f"📅 Jahr aus {tag_name} extrahiert: {self.year}")
+                            break
             
             # Genre
             if 'TCON' in audio:
@@ -418,6 +428,11 @@ class MP3FileInfo:
         if self.album_recognized and self.recognized_track_number:
             return self.recognized_track_number
         return self.track_number
+    
+    @property
+    def year_recognized(self):
+        """Gibt zurück, ob das Jahr durch Album-Erkennung ermittelt wurde."""
+        return self.album_recognized and self.recognized_year is not None
 
 
 def scan_mp3_directory(root_directory: str, max_files: int = 5000, max_dirs: int = 200) -> Dict[str, List[MP3FileInfo]]:

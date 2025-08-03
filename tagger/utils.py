@@ -152,7 +152,7 @@ def _collect_id3_tags(audio: MP3, info: Dict[str, Any]) -> None:
     # Basis-Tags (häufig verwendet)
     basic_tag_mapping = {
         'TIT2': 'Titel', 'TPE1': 'Artist', 'TALB': 'Album',
-        'TDRC': 'Jahr', 'TRCK': 'Track', 'TPOS': 'Disc', 'TCON': 'Genre'
+        'TDRC': 'Erscheinungsdatum', 'TRCK': 'Track', 'TPOS': 'Disc', 'TCON': 'Genre'
     }
     
     for tag_id, tag_name in basic_tag_mapping.items():

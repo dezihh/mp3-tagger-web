@@ -655,11 +655,27 @@ def apply_album():
             if best_match:
                 # Album-Daten anwenden
                 mp3_file.album = album_data.get('title', '')
-                mp3_file.year = album_data.get('year', '')
+                year_from_album = album_data.get('year', '')
+                mp3_file.year = year_from_album
                 mp3_file.track_number = str(best_match.get('number', ''))
                 
                 # Als erkannt markieren
                 mp3_file.album_recognized = True
+                
+                # Tags sofort in die MP3-Datei schreiben
+                tags_to_save = {
+                    'album': mp3_file.album,
+                    'track': mp3_file.track_number
+                }
+                
+                # Jahr nur hinzufügen wenn es erkannt wurde
+                if year_from_album and year_from_album.strip() and year_from_album != 'None':
+                    tags_to_save['year'] = year_from_album
+                    print(f"💡 Jahr für {mp3_file.filename}: '{year_from_album}' (aus Album-Daten)")
+                
+                # Tags in MP3-Datei speichern
+                save_result = save_mp3_tags(mp3_file.file_path, tags_to_save)
+                print(f"💾 Album-Tags gespeichert für {mp3_file.filename}: {save_result}")
                 
                 applied_files.append({
                     'filename': mp3_file.filename,

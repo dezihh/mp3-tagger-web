@@ -39,15 +39,22 @@ Eine moderne, webbasierte Anwendung zur Verwaltung und Bearbeitung von MP3-Metad
 - **Erkannte Tags**: Werden kursiv und grün markiert angezeigt
 - **Speichern**: Erkannte Werte werden erst beim manuellen Speichern übernommen
 
-### Frontend (HTML/CSS/JavaScript)
-- **`templates/results.html`**: Optimiertes Template mit modularem JavaScript
-- **`static/styles_optimized.css`**: Bereinigte CSS-Datei ohne Redundanzen
-- **Modulare JavaScript-Struktur**: Getrennte Funktionsbereiche für Wartbarkeit
+## 🏗️ Architektur & Module
 
-### Backend (Python/Flask)
-- **`app.py`**: Flask-Anwendung mit API-Endpoints
-- **`tagger/utils.py`**: Optimierte Utility-Funktionen mit verbesserter Struktur
-- **`tagger/mp3_processor.py`**: MP3-Verarbeitung und Metadaten-Extraktion
+### **Frontend (HTML/CSS/JavaScript)**
+- **`templates/index.html`**: Hauptseite mit Verzeichnisauswahl
+- **`templates/results.html`**: Optimierte Ergebnisansicht mit modularem JavaScript und Progress-Tracking
+- **`static/styles.css`**: Moderne CSS-Datei mit Responsive Design
+- **`static/utils.js`**: JavaScript-Utilities für UI-Interaktionen
+
+### **Backend (Python/Flask)**
+- **`app.py`**: Flask-Anwendung mit API-Endpoints und Workflow-Orchestrierung
+- **`tagger/mp3_processor.py`**: Kern-MP3-Verarbeitung und Metadaten-Extraktion
+- **`tagger/utils.py`**: Grundlegende Utilities für MP3-Tag-Operationen
+- **`tagger/extended_metadata.py`**: Erweiterte Metadaten-Anreicherung (Spotify, Last.fm)
+- **`tagger/audio_recognition.py`**: Audio-Fingerprinting (AcoustID/Shazam)
+- **`tagger/album_recognition.py`**: Album-Erkennung mit Progress-Tracking
+- **`tagger/http_client.py`**: Zentralisierte HTTP-Client-Utilities mit Rate-Limiting
 - **`tagger/directory_history.py`**: Verzeichnis-Verlauf Management
 2. **AcoustID-Erkennung** (Fallback): MusicBrainz-basierte Metadaten
 3. **Intelligente Segmentierung**: Verschiedene Audio-Abschnitte für bessere Trefferquote
@@ -186,14 +193,29 @@ Für markierte Dateien → **Erweiterte Anreicherung**:
 
 ## 🔧 Technische Anforderungen
 
-### API-Services und Konfiguration
+### **Entwicklungsumgebung**
+```bash
+# Virtuelles Environment erstellen und aktivieren
+python -m venv venv
+source venv/bin/activate  # Linux/Mac
+# oder: venv\Scripts\activate  # Windows
+
+# Abhängigkeiten installieren
+pip install -r requirements.txt
+
+# Server starten (Standard Port 5000)
+python app.py
+```
+
+### **API-Services und Konfiguration**
 
 **Verwendete Dienste für Metadaten-Anreicherung:**
-- **ShazamIO**: Audio-Fingerprinting (primärer Service, keine API-Key nötig)
-- **AcoustID**: Audio-Fingerprinting Fallback (kostenlos, API-Key erforderlich)
+- **AcoustID**: Audio-Fingerprinting (kostenlos, API-Key erforderlich)
+- **Shazam**: Audio-Fingerprinting Alternative (über ShazamIO, kein API-Key nötig)
 - **MusicBrainz**: Metadaten-Datenbank (kostenlos, User-Agent erforderlich)
-- **Last.fm**: Genre und Artist-Informationen (API-Key erforderlich)
 - **Discogs**: Release-Informationen und Cover (API-Key erforderlich)
+- **Spotify**: Metadaten und Cover-Art (API-Key erforderlich)
+- **Last.fm**: Genre und Zusatz-Informationen (API-Key erforderlich)
 
 **Konfiguration in `config.env`:**
 ```bash
@@ -201,6 +223,8 @@ Für markierte Dateien → **Erweiterte Anreicherung**:
 ACOUSTID_API_KEY=your_acoustid_key_here
 
 # Metadaten-Services  
+SPOTIFY_CLIENT_ID=your_spotify_client_id
+SPOTIFY_CLIENT_SECRET=your_spotify_client_secret
 LASTFM_API_KEY=your_lastfm_key_here
 MUSICBRAINZ_USERAGENT=YourAppName/1.0 (your@email.com)
 
@@ -216,89 +240,95 @@ LOG_FILE=~/tmp/mp3ren/processing.log
 
 **API-Key Beschaffung:**
 - **AcoustID**: Registrierung auf https://acoustid.org/
+- **Spotify**: App registrieren auf https://developer.spotify.com/
 - **Last.fm**: API-Key auf https://www.last.fm/api
 - **Discogs**: Developer Account auf https://www.discogs.com/developers/
 - **MusicBrainz**: Keine Registrierung, nur User-Agent erforderlich
 - **Shazam**: Keine API-Keys nötig (verwendet ShazamIO Python-Library)
 
-**Kern-Features (Priorität 1):**
+### **Aktueller Implementierungsstand**
+
+**Kern-Features (✅ Vollständig implementiert):**
 - ✅ Verzeichnis scannen und MP3s anzeigen
-- ✅ ID3-Metadaten bearbeiten
-- ✅ Cover-Status anzeigen
-- ✅ Speichern-Funktionalität
-- ✅ Dateiname-Parsing
+- ✅ ID3-Metadaten bearbeiten mit automatischer Checkbox-Aktivierung
+- ✅ Cover-Status anzeigen (intern/extern/beide/keine)
+- ✅ Robuste Speichern-Funktionalität mit Fehlerbehandlung
+- ✅ Intelligentes Dateiname-Parsing für Track-Nummern
+- ✅ Progress-Tracking für alle Operationen
 
-**Erweiterte Features (Priorität 2):**
-- ✅ Audio-Erkennung (Shazam/AcoustID)
-- ✅ Audio-Player
-- ✅ Hover-Details
-- ✅ Batch-Operationen
+**Erweiterte Features (✅ Vollständig implementiert):**
+- ✅ Audio-Erkennung (AcoustID/Shazam) mit Progress-Feedback
+- ✅ Album-Erkennung (MusicBrainz/Discogs) mit detailliertem Progress
+- ✅ Erweiterte Metadaten-Anreicherung (Spotify, Last.fm)
+- ✅ Hover-Details für MP3-Informationen
+- ✅ Batch-Operationen für markierte Dateien
+- ✅ HTTP-Client mit Rate-Limiting für alle API-Services
 
-**Nice-to-have (Priorität 3):**
-- ⭕ Erweiterte Genre-Anzeige
-- ⭕ Undo-Funktionalität
-- Rename der Zieldatei nach Muster
+**Code-Qualität (✅ Optimiert):**
+- ✅ Konsolidierte HTTP-Client-Utilities
+- ✅ Entfernung von orphaned Code und redundanten Dateien
+- ✅ Verbesserte Fehlerbehandlung und Logging
+- ✅ Modulare Architektur für bessere Wartbarkeit
 
-## 🚫 Bewusst ausgelassene Komplexität
+## 🚫 Bewusst einfach gehalten
 
-- Kein komplexes Cover-Management
-- Keine Playlist-Funktionen
-- Keine Datei-Organisation/Umbenennung
+- Keine komplexen Cover-Management-Dialoge
+- Keine Playlist-Funktionen im Audio-Player
+- Keine automatische Datei-Organisation/Umbenennung
 - Keine Benutzer-Accounts oder Sessions
-- Keine Datenbank für Metadaten-Cache
+- Keine persistente Datenbank (Filesystem-basiert)
 
 ---
 
-## Current Implementation Status
+## 🎯 Projektphilosophie
 
-Das aktuelle System ist überkomplex geworden. Diese Spezifikation dient als Grundlage für eine **Neuimplementierung** mit Fokus auf:
-1. **Einfachheit** - Weniger Features, bessere UX
-2. **Stabilität** - Robuste Kern-Funktionen
-3. **Wartbarkeit** - Sauberer, verständlicher Code
+Das System wurde bewusst als **schlanke, fokussierte MP3-Tagging-Lösung** entwickelt mit Priorität auf:
+
+1. **Einfachheit** - Intuitive Bedienung ohne steile Lernkurve
+2. **Stabilität** - Robuste Kern-Funktionen mit umfassendem Error-Handling  
+3. **Wartbarkeit** - Saubere, modulare Architektur für einfache Erweiterung
+4. **Performance** - Effiziente Batch-Operationen mit Progress-Feedback
 
 ---
 
-## 📁 Empfohlene Projektstruktur
-
-Für eine wartbare, moderne Flask-Webanwendung mit den dokumentierten Features empfiehlt sich folgende Struktur:
+## 📁 Aktuelle Projektstruktur
 
 ```
 mp3-tagger-web/
 │
-├── app.py                # Haupt-Flask-App (Entry Point)
-├── requirements.txt      # Python-Abhängigkeiten
-├── config.env            # Konfiguration & API-Keys
+├── app.py                       # Flask-Hauptanwendung mit API-Endpoints
+├── requirements.txt             # Python-Abhängigkeiten
+├── config.env                   # Konfiguration & API-Keys
+├── directory_history.json       # Verzeichnis-Verlauf (auto-generiert)
 │
-├── static/               # Statische Dateien (JS, CSS, Bilder)
-│   ├── js/
-│   ├── css/
-│   └── img/
+├── static/                      # Frontend-Assets
+│   ├── styles.css              # Moderne CSS mit Responsive Design
+│   ├── utils.js                # JavaScript-Utilities
+│   ├── drag-drop-icon.svg      # UI-Icons
+│   └── fallback-icon.png       # Fallback-Grafiken
 │
-├── templates/            # HTML-Templates (Jinja2)
-│   └── index.html
+├── templates/                   # Jinja2-Templates
+│   ├── index.html              # Startseite mit Verzeichnisauswahl
+│   └── results.html            # Hauptansicht mit MP3-Tabelle
 │
-├── tagger/               # Backend-Logik (MP3-Tagging, Enrichment)
-│   ├── __init__.py
-│   ├── scanner.py        # Verzeichnis-Scan & Dateiname-Parsing
-│   ├── id3.py            # ID3-Tag-Lesen/Schreiben
-│   ├── cover.py          # Cover-Handling
-│   ├── enrich.py         # Metadaten-Anreicherung (API-Services)
-│   └── audio.py          # Audio-Fingerprinting (Shazam/AcoustID)
+├── tagger/                      # Backend-Kern-Module
+│   ├── __init__.py             # Package-Initialisierung
+│   ├── mp3_processor.py        # MP3-Verarbeitung & Metadaten-Extraktion
+│   ├── utils.py                # Grundlegende MP3-Tag-Operationen
+│   ├── audio_recognition.py    # Audio-Fingerprinting (AcoustID/Shazam)
+│   ├── album_recognition.py    # Album-Erkennung mit Progress-Tracking
+│   ├── extended_metadata.py    # Metadaten-Anreicherung (Spotify/Last.fm)
+│   ├── http_client.py          # HTTP-Client mit Rate-Limiting
+│   └── directory_history.py    # Verzeichnis-Verlauf Management
 │
-├── tests/                # (Optional) Unit- und Integrationstests
-│   └── test_tagger.py
-│
-└── README.md             # Dokumentation & Workflow
+└── test_music/                  # Test-MP3-Dateien (für Development)
 ```
 
-**Vorteile:**
-- Klare Trennung von Backend-Logik (`tagger/`), Web-UI (`templates/`, `static/`), und Konfiguration.
-- Erweiterbar für neue Features.
-- Einfaches Deployment und Testing.
-
-Optional für größere Projekte:
-- `instance/` für lokale Einstellungen
-- `migrations/` für Datenbankmigrationen (falls später benötigt)
+**Architektur-Vorteile:**
+- **Modulare Trennung**: Klare Separation zwischen Web-UI, Business-Logic und API-Services
+- **Skalierbar**: Neue Features können als separate Module hinzugefügt werden  
+- **Testbar**: Isolierte Module ermöglichen einfaches Unit-Testing
+- **Deployment-ready**: Alle Abhängigkeiten klar definiert und containerisierbar
 
 
 

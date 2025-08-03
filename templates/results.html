@@ -252,7 +252,7 @@
          * Aktiviert automatisch Checkbox bei Änderungen in Eingabefeldern
          */
         function initializeAutoCheckbox() {
-            const inputFields = document.querySelectorAll('.title-input, .artist-input, .album-input, .year-input, .track-input, .genre-input');
+            const inputFields = document.querySelectorAll('.title-input, .artist-input, .album-input, .track-input, .genre-input');
             inputFields.forEach(input => {
                 input.addEventListener('input', function() {
                     const row = this.closest('.mp3-row');
@@ -882,7 +882,6 @@
                         title: row.querySelector('.title-input')?.value || '',
                         artist: row.querySelector('.artist-input')?.value || '',
                         album: row.querySelector('.album-input')?.value || '',
-                        year: row.querySelector('.year-input')?.value || '',
                         track: row.querySelector('.track-input')?.value || '',
                         genre: row.querySelector('.genre-input')?.value || ''
                     };
@@ -1337,11 +1336,6 @@
                     // Album-Feld aktualisieren mit utils-Funktion
                     if (fileData.album) {
                         updateRecognizedField(fileData.filename, 'album', fileData.album, 'album_recognition');
-                    }
-                    
-                    // Jahr-Feld aktualisieren mit utils-Funktion
-                    if (fileData.year) {
-                        updateRecognizedField(fileData.filename, 'year', fileData.year, 'album_recognition');
                     }
                     
                     // Track-Nummer aktualisieren mit formatierter utils-Funktion
