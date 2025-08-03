@@ -19,6 +19,7 @@ from tagger.utils import has_mp3_files, count_mp3_files_in_directory, is_mp3_fil
 from tagger.audio_recognition import create_recognition_service, AudioRecognitionBatch
 from tagger.album_recognition import create_album_recognition_service
 from tagger.extended_metadata import create_extended_metadata_service
+from tagger.cover_manager import create_cover_manager
 
 app = Flask(__name__)
 
@@ -1018,6 +1019,204 @@ def apply_frontend_overrides(mp3_files, frontend_overrides):
     
     if applied_count > 0:
         print(f"✅ Frontend-Overrides angewendet auf {applied_count} Dateien")
+
+
+@app.route('/api/cover-analysis', methods=['POST'])
+def cover_analysis():
+    """
+    API-Endpoint für Cover-Analyse eines Verzeichnisses.
+    
+    Expected JSON:
+    {
+        "directory": "/path/to/music/directory"
+    }
+    
+    Returns:
+        JSON mit Cover-Informationen und verfügbaren Quellen
+    """
+    try:
+        data = request.get_json()
+        
+        if not data or 'directory' not in data:
+            return jsonify({
+                'success': False,
+                'message': 'Verzeichnispfad erforderlich'
+            })
+        
+        directory = data['directory']
+        
+        print(f"🖼️ Cover-Analyse für Verzeichnis: {directory}")
+        
+        if not os.path.isdir(directory):
+            print(f"❌ Verzeichnis nicht gefunden: {directory}")
+            return jsonify({
+                'success': False,
+                'message': 'Verzeichnis nicht gefunden'
+            })
+        
+        # Cover-Manager initialisieren und Analyse durchführen
+        cover_manager = create_cover_manager(directory)
+        cover_info = cover_manager.analyze_directory_covers()
+        
+        # Daten für Frontend aufbereiten
+        result = {
+            'success': True,
+            'directory': cover_info.directory,
+            'statistics': {
+                'total_mp3_files': cover_info.total_mp3_files,
+                'files_with_covers': cover_info.files_with_covers,
+                'files_without_covers': cover_info.files_without_covers,
+                'coverage_percentage': round((cover_info.files_with_covers / cover_info.total_mp3_files * 100) if cover_info.total_mp3_files > 0 else 0, 1)
+            },
+            'cover_sources': [],
+            'external_files': cover_info.external_cover_files
+        }
+        
+        # Cover-Quellen für Frontend aufbereiten
+        for cover in cover_info.unique_covers:
+            cover_data = {
+                'type': cover.type,
+                'path': cover.path,
+                'size': {'width': cover.size[0], 'height': cover.size[1]},
+                'format': cover.format,
+                'hash': cover.hash,
+                'usage_count': cover.usage_count,
+                'has_preview': cover.preview_data is not None
+            }
+            
+            # Preview-Daten als Base64 für Frontend
+            if cover.preview_data:
+                import base64
+                cover_data['preview_base64'] = base64.b64encode(cover.preview_data).decode('utf-8')
+            
+            result['cover_sources'].append(cover_data)
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'Fehler bei Cover-Analyse: {str(e)}'
+        })
+
+
+@app.route('/api/apply-cover', methods=['POST'])
+def apply_cover():
+    """
+    API-Endpoint zum Anwenden eines Covers auf alle MP3s im Verzeichnis.
+    
+    Expected JSON:
+    {
+        "directory": "/path/to/music/directory",
+        "cover_hash": "md5_hash_of_cover",
+        "target_size": "medium",  // small, medium, large, xlarge
+        "delete_external": false
+    }
+    
+    Returns:
+        JSON mit Ergebnissen der Cover-Anwendung
+    """
+    try:
+        data = request.get_json()
+        
+        required_fields = ['directory', 'cover_hash']
+        if not data or not all(field in data for field in required_fields):
+            return jsonify({
+                'success': False,
+                'message': 'Verzeichnis und Cover-Hash erforderlich'
+            })
+        
+        directory = data['directory']
+        cover_hash = data['cover_hash']
+        target_size_name = data.get('target_size', 'medium')
+        delete_external = data.get('delete_external', False)
+        
+        # Cover-Manager initialisieren
+        cover_manager = create_cover_manager(directory)
+        cover_info = cover_manager.analyze_directory_covers()
+        
+        # Cover-Quelle finden
+        selected_cover = None
+        for cover in cover_info.unique_covers:
+            if cover.hash == cover_hash:
+                selected_cover = cover
+                break
+        
+        if not selected_cover:
+            return jsonify({
+                'success': False,
+                'message': 'Cover mit dem angegebenen Hash nicht gefunden'
+            })
+        
+        # Zielgröße bestimmen
+        target_sizes = cover_manager.TARGET_SIZES
+        target_size = target_sizes.get(target_size_name, target_sizes['medium'])
+        
+        # Cover anwenden
+        result = cover_manager.apply_cover_to_directory(
+            selected_cover, 
+            target_size, 
+            delete_external
+        )
+        
+        if 'error' in result:
+            return jsonify({
+                'success': False,
+                'message': result['error']
+            })
+        
+        return jsonify({
+            'success': True,
+            'message': f'Cover erfolgreich auf {result["success"]} Dateien angewendet',
+            'results': result
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'Fehler beim Anwenden des Covers: {str(e)}'
+        })
+
+
+@app.route('/api/remove-covers', methods=['POST'])
+def remove_covers():
+    """
+    API-Endpoint zum Entfernen aller Cover aus MP3-Dateien.
+    
+    Expected JSON:
+    {
+        "directory": "/path/to/music/directory"
+    }
+    
+    Returns:
+        JSON mit Ergebnissen der Cover-Entfernung
+    """
+    try:
+        data = request.get_json()
+        
+        if not data or 'directory' not in data:
+            return jsonify({
+                'success': False,
+                'message': 'Verzeichnispfad erforderlich'
+            })
+        
+        directory = data['directory']
+        
+        # Cover-Manager initialisieren und Cover entfernen
+        cover_manager = create_cover_manager(directory)
+        result = cover_manager.remove_all_covers()
+        
+        return jsonify({
+            'success': True,
+            'message': f'Cover von {result["success"]} Dateien entfernt',
+            'results': result
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'Fehler beim Entfernen der Cover: {str(e)}'
+        })
 
 
 if __name__ == '__main__':

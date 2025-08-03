@@ -79,6 +79,9 @@
                         <span class="checkmark"></span>
                         Alle in diesem Ordner ({{ files|length }})
                     </label>
+                    <button class="btn btn-sm btn-info cover-management-btn" title="Cover-Management für dieses Verzeichnis">
+                        🖼️ Cover verwalten
+                    </button>
                 </div>
             </div>
             
@@ -430,8 +433,27 @@
                 const filepath = row.dataset.filepath;
 
                 filenameElement.addEventListener('mouseenter', e => showTooltip(e, filepath));
-                filenameElement.addEventListener('mouseleave', hideTooltip);
-                filenameElement.addEventListener('mousemove', updateTooltipPosition);
+                filenameElement.addEventListener('mouseleave', e => {
+                    // Kurze Verzögerung, damit User zum Tooltip navigieren kann
+                    hideTooltip();
+                });
+                // mousemove entfernt - Tooltip bleibt stabil für Scrollbar-Zugriff
+            });
+            
+            // Globaler Listener für Mausbewegungen außerhalb der Filename-Bereiche
+            document.addEventListener('mousemove', (e) => {
+                if (tooltipElement && tooltipElement.classList.contains('show')) {
+                    const targetElement = e.target;
+                    
+                    // Prüfe, ob Maus über Tooltip oder Filename ist
+                    const isOverTooltip = tooltipElement.contains(targetElement);
+                    const isOverFilename = targetElement.closest('.filename');
+                    
+                    // Verstecke Tooltip, wenn Maus weder über Filename noch über Tooltip ist
+                    if (!isOverTooltip && !isOverFilename) {
+                        hideTooltip();
+                    }
+                }
             });
         }
 
@@ -442,6 +464,16 @@
             tooltipElement.innerHTML = '<div class="tooltip-loading">Lade MP3-Informationen</div>';
             tooltipElement.classList.add('show');
             updateTooltipPosition(event);
+
+            // Tooltip-Interaktivität für Scrollbar aktivieren - aber nur über dem Tooltip selbst
+            tooltipElement.addEventListener('mouseenter', () => {
+                clearTimeout(tooltipTimeout);
+            });
+            
+            tooltipElement.addEventListener('mouseleave', () => {
+                // Tooltip verschwindet sofort, wenn Maus das Tooltip verlässt
+                hideTooltip();
+            });
 
             // MP3-Informationen via API laden mit optimierter makeApiCall
             const encodedPath = encodeURIComponent(filepath);
@@ -632,7 +664,7 @@
         }        function hideTooltip() {
             tooltipTimeout = setTimeout(() => {
                 tooltipElement.classList.remove('show');
-            }, 100);
+            }, 150); // Kürzere Verzögerung für bessere Responsivität
         }
 
         function updateTooltipPosition(event) {
@@ -652,32 +684,22 @@
             const scrollX = window.pageXOffset || document.documentElement.scrollLeft;
             const scrollY = window.pageYOffset || document.documentElement.scrollTop;
             
-            // Startposition: rechts unten vom Cursor
+            // Horizontale Position: rechts vom Cursor, falls Platz vorhanden
             let x = event.pageX + margin;
-            let y = event.pageY + margin;
-            
-            // Horizontale Anpassung bei Überlauf
             if (event.clientX + tooltipRect.width + margin > windowWidth) {
                 x = event.pageX - tooltipRect.width - margin;
             }
             
-            // Vertikale Anpassung bei Überlauf
-            if (event.clientY + tooltipRect.height + margin > windowHeight) {
-                y = event.pageY - tooltipRect.height - margin;
-                
-                // Falls immer noch nicht passt, über dem Cursor positionieren
-                if (y < scrollY) {
-                    y = event.pageY - tooltipRect.height - margin;
-                    // Mindestabstand zum oberen Rand
-                    if (y < scrollY + 10) {
-                        y = scrollY + 10;
-                    }
-                }
-            }
+            // Vertikale Position: IMMER oben am Bildschirmrand beginnen
+            let y = scrollY + margin; // Tooltip beginnt oben am sichtbaren Bereich
             
-            // Sicherstellen, dass der Tooltip im Viewport bleibt
+            // Sicherstellen, dass der Tooltip horizontal im Viewport bleibt
             x = Math.max(scrollX + 10, Math.min(x, scrollX + windowWidth - tooltipRect.width - 10));
-            y = Math.max(scrollY + 10, Math.min(y, scrollY + windowHeight - tooltipRect.height - 10));
+            
+            // Bei sehr kleinen Bildschirmen: Zentriere horizontal
+            if (tooltipRect.width > windowWidth - 20) {
+                x = scrollX + 10;
+            }
             
             // Finale Position setzen
             tooltip.style.left = x + 'px';
@@ -1780,6 +1802,321 @@ Möchten Sie wirklich fortfahren?`;
                     if (titleElement) titleElement.textContent = title;
                 }
             };
+        }
+
+        /**
+         * Cover-Management Funktionalität
+         */
+        class CoverManager {
+            constructor() {
+                // Extrahiere das Verzeichnis aus der URL (mp3_dir Parameter)
+                const urlParams = new URLSearchParams(window.location.search);
+                this.baseDirectory = urlParams.get('mp3_dir') || '';
+                this.currentDirectory = null; // Wird beim Öffnen gesetzt
+                this.modal = null;
+                this.coverSources = [];
+                this.init();
+            }
+
+            init() {
+                // Event-Listener für jeden Verzeichnis-spezifischen Cover-Button
+                document.addEventListener('click', (event) => {
+                    if (event.target.classList.contains('cover-management-btn')) {
+                        const directoryGroup = event.target.closest('.directory-group');
+                        if (directoryGroup) {
+                            // Extrahiere Base-Verzeichnis aus URL-Parameter (das ist bereits der vollständige Pfad!)
+                            const urlParams = new URLSearchParams(window.location.search);
+                            const baseDirectory = urlParams.get('mp3_dir');
+                            
+                            if (!baseDirectory) {
+                                console.error('❌ Base-Verzeichnis nicht in URL gefunden');
+                                return;
+                            }
+                            
+                            // Der URL-Parameter enthält bereits den vollständigen Pfad zum Verzeichnis
+                            // Wir müssen NICHT den relativen Pfad anhängen
+                            this.currentDirectory = baseDirectory;
+                            
+                            console.log('🎯 Cover-Management für Verzeichnis:', this.currentDirectory);
+                            this.openCoverManagement();
+                        }
+                    }
+                });
+            }
+
+            async openCoverManagement() {
+                if (!this.currentDirectory) {
+                    showToast('Kein Verzeichnis ausgewählt', 'error');
+                    return;
+                }
+
+                console.log('Cover-Management für Verzeichnis:', this.currentDirectory);
+
+                // Modal erstellen und anzeigen
+                this.createCoverModal();
+                
+                // Cover-Analyse durchführen
+                await this.analyzeCoverSources();
+            }
+
+            createCoverModal() {
+                // Entferne existierendes Modal falls vorhanden
+                const existingModal = document.getElementById('coverModal');
+                if (existingModal) {
+                    existingModal.remove();
+                }
+
+                const modalHTML = `
+                    <div id="coverModal" class="modal-overlay">
+                        <div class="modal-content cover-modal">
+                            <div class="modal-header">
+                                <h3>🖼️ Cover-Management</h3>
+                                <button class="modal-close" onclick="closeCoverModal()">&times;</button>
+                            </div>
+                            <div class="modal-body">
+                                <div id="coverAnalysisSection">
+                                    <div class="loading-spinner">
+                                        <div class="spinner"></div>
+                                        <p>Analysiere Cover-Quellen...</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+
+                document.body.insertAdjacentHTML('beforeend', modalHTML);
+                this.modal = document.getElementById('coverModal');
+                
+                // Overlay-Click zum Schließen
+                this.modal.addEventListener('click', (e) => {
+                    if (e.target === this.modal) {
+                        closeCoverModal();
+                    }
+                });
+                
+                // Escape-Taste zum Schließen
+                document.addEventListener('keydown', (e) => {
+                    if (e.key === 'Escape' && this.modal) {
+                        closeCoverModal();
+                    }
+                });
+            }
+
+            async analyzeCoverSources() {
+                try {
+                    const response = await makeApiCall('/api/cover-analysis', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            directory: this.currentDirectory
+                        })
+                    });
+
+                    if (response.success) {
+                        this.coverSources = response.cover_sources;
+                        this.renderCoverSources(response);
+                    } else {
+                        throw new Error(response.message);
+                    }
+                } catch (error) {
+                    console.error('Cover-Analyse Fehler:', error);
+                    this.renderError(error.message);
+                }
+            }
+
+            renderCoverSources(data) {
+                const analysisSection = document.getElementById('coverAnalysisSection');
+                const stats = data.statistics;
+
+                const html = `
+                    <div class="cover-statistics">
+                        <h4>📊 Verzeichnis-Statistiken</h4>
+                        <div class="stats-grid">
+                            <div class="stat-item">
+                                <span class="stat-number">${stats.total_mp3_files}</span>
+                                <span class="stat-label">MP3-Dateien</span>
+                            </div>
+                            <div class="stat-item">
+                                <span class="stat-number">${stats.files_with_covers}</span>
+                                <span class="stat-label">Mit Cover</span>
+                            </div>
+                            <div class="stat-item">
+                                <span class="stat-number">${stats.files_without_covers}</span>
+                                <span class="stat-label">Ohne Cover</span>
+                            </div>
+                            <div class="stat-item">
+                                <span class="stat-number">${stats.coverage_percentage}%</span>
+                                <span class="stat-label">Abdeckung</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="cover-sources-section">
+                        <h4>🎯 Verfügbare Cover-Quellen (${data.cover_sources.length} unique)</h4>
+                        <div class="cover-sources-grid">
+                            ${this.renderCoverSourceItems(data.cover_sources)}
+                        </div>
+                    </div>
+
+                    <div class="cover-actions-section">
+                        <h4>🎛️ Aktionen</h4>
+                        <div class="action-buttons">
+                            <button class="btn btn-danger" onclick="coverManager.removeAllCovers()">
+                                🗑️ Alle Cover löschen
+                            </button>
+                            <button class="btn btn-secondary" onclick="closeCoverModal()">
+                                ❌ Abbrechen
+                            </button>
+                        </div>
+                    </div>
+                `;
+
+                analysisSection.innerHTML = html;
+            }
+
+            renderCoverSourceItems(sources) {
+                if (sources.length === 0) {
+                    return '<div class="no-covers">Keine Cover gefunden</div>';
+                }
+
+                return sources.map(cover => {
+                    const typeIcon = {
+                        'internal': '📱',
+                        'external': '📁',
+                        'url': '🌐'
+                    }[cover.type] || '❓';
+
+                    const sizeText = cover.size.width > 0 ? 
+                        `${cover.size.width}×${cover.size.height}px` : 'Unbekannt';
+
+                    return `
+                        <div class="cover-source-item" data-hash="${cover.hash}">
+                            <div class="cover-preview">
+                                ${cover.has_preview ? 
+                                    `<img src="data:image/jpeg;base64,${cover.preview_base64}" alt="Cover Preview">` :
+                                    '<div class="no-preview">📷</div>'
+                                }
+                            </div>
+                            <div class="cover-info">
+                                <div class="cover-type">${typeIcon} ${cover.type}</div>
+                                <div class="cover-size">${sizeText}</div>
+                                <div class="cover-usage">✅ ${cover.usage_count}x verwendet</div>
+                                <div class="cover-format">${cover.format}</div>
+                            </div>
+                            <div class="cover-actions">
+                                <select class="size-selector">
+                                    <option value="small">150×150px</option>
+                                    <option value="medium" selected>300×300px</option>
+                                    <option value="large">500×500px</option>
+                                    <option value="xlarge">800×800px</option>
+                                </select>
+                                <button class="btn btn-primary" onclick="coverManager.applyCover('${cover.hash}', this)">
+                                    📥 Anwenden
+                                </button>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+            }
+
+            async applyCover(coverHash, buttonElement) {
+                const coverItem = buttonElement.closest('.cover-source-item');
+                const sizeSelector = coverItem.querySelector('.size-selector');
+                const targetSize = sizeSelector.value;
+                
+                // Button deaktivieren und Loading-Status
+                buttonElement.disabled = true;
+                buttonElement.innerHTML = '⏳ Anwenden...';
+
+                try {
+                    const response = await makeApiCall('/api/apply-cover', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            directory: this.currentDirectory,
+                            cover_hash: coverHash,
+                            target_size: targetSize,
+                            delete_external: false
+                        })
+                    });
+
+                    if (response.success) {
+                        showToast(response.message, 'success');
+                        // Cover-Analyse aktualisieren
+                        await this.analyzeCoverSources();
+                    } else {
+                        throw new Error(response.message);
+                    }
+                } catch (error) {
+                    console.error('Cover-Anwendung Fehler:', error);
+                    showToast(`Fehler: ${error.message}`, 'error');
+                } finally {
+                    buttonElement.disabled = false;
+                    buttonElement.innerHTML = '📥 Anwenden';
+                }
+            }
+
+            async removeAllCovers() {
+                if (!confirm('Möchten Sie wirklich alle Cover aus allen MP3-Dateien entfernen?')) {
+                    return;
+                }
+
+                try {
+                    const response = await makeApiCall('/api/remove-covers', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            directory: this.currentDirectory
+                        })
+                    });
+
+                    if (response.success) {
+                        showToast(response.message, 'success');
+                        // Cover-Analyse aktualisieren
+                        await this.analyzeCoverSources();
+                    } else {
+                        throw new Error(response.message);
+                    }
+                } catch (error) {
+                    console.error('Cover-Entfernung Fehler:', error);
+                    showToast(`Fehler: ${error.message}`, 'error');
+                }
+            }
+
+            renderError(errorMessage) {
+                const analysisSection = document.getElementById('coverAnalysisSection');
+                analysisSection.innerHTML = `
+                    <div class="error-message">
+                        <h4>❌ Fehler</h4>
+                        <p>${errorMessage}</p>
+                        <button class="btn btn-secondary" onclick="closeCoverModal()">Schließen</button>
+                    </div>
+                `;
+            }
+        }
+
+        // Cover-Manager initialisieren
+        let coverManager;
+        document.addEventListener('DOMContentLoaded', () => {
+            coverManager = new CoverManager();
+        });
+
+        // Global verfügbare Funktionen
+        function closeCoverModal() {
+            const modal = document.getElementById('coverModal');
+            if (modal) {
+                modal.style.animation = 'modalSlideOut 0.3s ease-in forwards';
+                setTimeout(() => {
+                    modal.remove();
+                }, 300);
+            }
         }
     </script>
 </body>

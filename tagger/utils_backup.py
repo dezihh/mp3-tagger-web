@@ -2,7 +2,78 @@
 MP3 Tagger Web Application - Optimized Utility Functions
 
 Zentrale Hilfsfunktionen für die MP3 Tagger Web Application.
-Stellt wiederverwendbare, optimierte Funktionen für häufige Operationen bereit:
+Stellt wiederverwendbare, optimierte Funktionen für hä    # Erweiterte Meta    # Erweiterte Metadate    # Erweiterte Metadaten aus TXXX-Tags sammeln
+    extended_metadata_mapping = {
+        'EXTENDED_GENRES': '🎪 Genres (erweitert)',
+        'MOOD': '🎭 Mood',
+        'SIMILAR_ARTISTS': '👥 Ähnliche Künstler',
+        'AUDIO_FEATURES': '🎵 Audio Features',
+        'TAGS': '🏷️ Tags',
+        'RELEASE_DATE': '📅 Release Datum',
+        'POPULARITY': '⭐ Beliebtheit',
+        'COVER_URL': '🔗 Cover-URL',
+        'COVER_URLS': '📐 Cover-Größen',
+        'SOURCES_USED': '📡 Quellen',
+        'ENERGY': '⚡ Energy',
+        'DANCEABILITY': '💃 Danceability',
+        'VALENCE': '😊 Positivität',
+        'ACOUSTICNESS': '🎸 Akustik'
+    }
+    
+    # Abgeleitete/Duplikat-Felder die niemals angezeigt werden sollen
+    excluded_tags = {
+        'RELEASE_YEAR',      # Duplikat von RELEASE_DATE
+        'POPULARITY_ALT',    # Duplikat von POPULARITY  
+        'SIMILAR_ARTISTS_SHORT',  # Duplikat von SIMILAR_ARTISTS
+        'COVER_AVAILABLE',   # Duplikat von COVER_URL
+        'COVER_STATUS'       # Duplikat von COVER_URL
+    }ammeln
+    extended_metadata_mapping = {
+        'EXTENDED_GENRES': '🎪 Genres (erweitert)',
+        'MOOD': '🎭 Mood',
+        'SIMILAR_ARTISTS': '👥 Ähnliche Künstler',
+        'AUDIO_FEATURES': '🎵 Audio Features',
+        'TAGS': '🏷️ Tags',
+        'RELEASE_DATE': '📅 Release Datum',
+        'POPULARITY': '⭐ Beliebtheit',
+        'COVER_URL': '🔗 Cover-URL',
+        'COVER_URLS': '📐 Cover-Größen',
+        'SOURCES_USED': '📡 Quellen',
+        'ENERGY': '⚡ Energy',
+        'DANCEABILITY': '💃 Danceability',
+        'VALENCE': '😊 Positivität',
+        'ACOUSTICNESS': '🎸 Akustik'
+    }
+    
+    # Abgeleitete/Duplikat-Felder die niemals angezeigt werden sollen
+    excluded_tags = {
+        'RELEASE_YEAR',      # Duplikat von RELEASE_DATE
+        'POPULARITY_ALT',    # Duplikat von POPULARITY  
+        'SIMILAR_ARTISTS_SHORT',  # Duplikat von SIMILAR_ARTISTS
+        'COVER_AVAILABLE',   # Duplikat von COVER_URL
+        'COVER_STATUS'       # Duplikat von COVER_URL
+    }gs sammeln
+    extended_metadata_mapping = {
+        'EXTENDED_GENRES': '🎪 Genres (erweitert)',
+        'MOOD': '🎭 Mood',
+        'SIMILAR_ARTISTS': '👥 Ähnliche Künstler',
+        'SIMILAR_ARTISTS_SHORT': '👥 Ähnlich wie',
+        'AUDIO_FEATURES': '🎵 Audio Features',
+        'TAGS': '🏷️ Tags',
+        'RELEASE_DATE': '📅 Release Datum',
+        'RELEASE_YEAR': '📅 Erscheinungsjahr',
+        'POPULARITY': '⭐ Beliebtheit',
+        'POPULARITY_ALT': '⭐ Popularity',
+        'COVER_URL': '🔗 Cover-URL',
+        'COVER_AVAILABLE': '🖼️ Cover verfügbar',
+        'COVER_STATUS': '🖼️ Cover verfügbar',
+        'COVER_URLS': '📐 Cover-Größen',
+        'SOURCES_USED': '📡 Quellen',
+        'ENERGY': '⚡ Energy',
+        'DANCEABILITY': '💃 Danceability',
+        'VALENCE': '😊 Positivität',
+        'ACOUSTICNESS': '🎸 Akustik'
+    } bereit:
 
 Funktionsgruppen:
 - Datei-System: MP3-Validierung, Pfad-Normalisierung
@@ -184,17 +255,15 @@ def _collect_id3_tags(audio: MP3, info: Dict[str, Any]) -> None:
         'TAGS': '🏷️ Tags',
         'RELEASE_DATE': '📅 Release Datum',
         'POPULARITY': '⭐ Beliebtheit',
-        'COVER_URL': '🔗 Cover-URL',
+        'COVER_URL': '� Cover-URL',
         'COVER_URLS': '📐 Cover-Größen',
         'SOURCES_USED': '📡 Quellen',
         'ENERGY': '⚡ Energy',
         'DANCEABILITY': '💃 Danceability',
         'VALENCE': '😊 Positivität',
         'ACOUSTICNESS': '🎸 Akustik'
-    }
-    
-    # Abgeleitete/Duplikat-Felder die nie angezeigt werden sollen
-    excluded_duplicate_tags = {
+    # Abgeleitete/Duplikat-Felder die niemals angezeigt werden sollen
+    excluded_tags = {
         'RELEASE_YEAR',      # Duplikat von RELEASE_DATE
         'POPULARITY_ALT',    # Duplikat von POPULARITY  
         'SIMILAR_ARTISTS_SHORT',  # Duplikat von SIMILAR_ARTISTS
@@ -202,77 +271,83 @@ def _collect_id3_tags(audio: MP3, info: Dict[str, Any]) -> None:
         'COVER_STATUS'       # Duplikat von COVER_URL
     }
     
-    # TXXX (User-defined) Tags durchsuchen
+    # Sammle alle TXXX-Tags und filtere Duplikate sofort heraus
+    txxx_tags = {}
     for tag_key, tag_value in tags.items():
         if tag_key.startswith('TXXX:') and hasattr(tag_value, 'desc'):
             desc = tag_value.desc
             value = str(tag_value.text[0]) if tag_value.text else ''
             
-            # Überspringe ausgeschlossene Duplikat-Tags
-            if desc in excluded_duplicate_tags:
+            # Überspringe ausgeschlossene (abgeleitete) Tags
+            if desc in excluded_tags:
                 continue
+                
+            # Nur nicht-leere Werte und erlaubte Tags
+            if value and desc in extended_metadata_mapping:
+                txxx_tags[desc] = value
+    
+    # TXXX (User-defined) Tags verarbeiten
+    for desc, value in txxx_tags.items():
+        label = extended_metadata_mapping[desc]
+        
+        # Spezielle Formatierung für verschiedene Datentypen
+        if desc == 'AUDIO_FEATURES':
+            # Parse "energy:0.825, danceability:0.742" zu lesbar
+            features = []
+            for feature in value.split(','):
+                if ':' in feature:
+                    name, val = feature.strip().split(':', 1)
+                    try:
+                        # Namen übersetzen
+                        feature_names = {
+                            'energy': 'Energy', 'danceability': 'Danceability',
+                            'valence': 'Valence', 'acousticness': 'Acousticness'
+                        }
+                        display_name = feature_names.get(name, name.title())
+                        features.append(f"{display_name}: {float(val):.2f}")
+                    except ValueError:
+                        features.append(f"{name}: {val}")
+            value = ', '.join(features) if features else value
             
-            if desc in extended_metadata_mapping and value:
-                label = extended_metadata_mapping[desc]
-                
-                # Spezielle Formatierung für verschiedene Datentypen
-                if desc == 'AUDIO_FEATURES':
-                    # Parse "energy:0.825, danceability:0.742" zu lesbar
-                    features = []
-                    for feature in value.split(','):
-                        if ':' in feature:
-                            name, val = feature.strip().split(':', 1)
-                            try:
-                                # Namen übersetzen
-                                feature_names = {
-                                    'energy': 'Energy', 'danceability': 'Danceability',
-                                    'valence': 'Valence', 'acousticness': 'Acousticness'
-                                }
-                                display_name = feature_names.get(name, name.title())
-                                features.append(f"{display_name}: {float(val):.2f}")
-                            except ValueError:
-                                features.append(f"{name}: {val}")
-                    value = ', '.join(features) if features else value
-                
-                elif desc == 'POPULARITY':
-                    try:
-                        pop_val = int(value)
-                        value = f"{pop_val}/100"
-                    except ValueError:
-                        pass
-                        
-                elif desc in ['SIMILAR_ARTISTS', 'EXTENDED_GENRES', 'TAGS']:
-                    # Limitiere die Anzahl der angezeigten Items für bessere Lesbarkeit
-                    items = [item.strip() for item in value.split(',')]
-                    if len(items) > 5:
-                        value = ', '.join(items[:5]) + f' (+{len(items)-5} weitere)'
-                    else:
-                        value = ', '.join(items)
-                
-                elif desc == 'COVER_URL':
-                    # Cover-URL anzeigen (kurz)
-                    if len(value) > 50:
-                        value = value[:47] + '...'
-                
-                elif desc == 'COVER_URLS':
-                    # JSON-Cover-URLs parsen und anzeigen
-                    try:
-                        import json
-                        cover_urls = json.loads(value)
-                        sizes = list(cover_urls.keys())
-                        value = f"{len(sizes)} Größen: {', '.join(sizes)}"
-                    except (json.JSONDecodeError, AttributeError):
-                        value = "Cover-URLs verfügbar"
-                
-                elif desc in ['ENERGY', 'DANCEABILITY', 'VALENCE', 'ACOUSTICNESS']:
-                    # Audio Features als Prozent anzeigen
-                    try:
-                        feature_val = float(value)
-                        value = f"{feature_val * 100:.0f}%"
-                    except ValueError:
-                        pass
-                
-                info['extended'][label] = value
+            elif desc == 'POPULARITY':
+                try:
+                    pop_val = int(value)
+                    value = f"{pop_val}/100"
+                except ValueError:
+                    pass
+                    
+            elif desc in ['SIMILAR_ARTISTS', 'EXTENDED_GENRES', 'TAGS']:
+                # Limitiere die Anzahl der angezeigten Items für bessere Lesbarkeit
+                items = [item.strip() for item in value.split(',')]
+                if len(items) > 5:
+                    value = ', '.join(items[:5]) + f' (+{len(items)-5} weitere)'
+                else:
+                    value = ', '.join(items)
+            
+            elif desc == 'COVER_URL':
+                # Cover-URL anzeigen (kurz)
+                if len(value) > 50:
+                    value = value[:47] + '...'
+            
+            elif desc == 'COVER_URLS':
+                # JSON-Cover-URLs parsen und anzeigen
+                try:
+                    import json
+                    cover_urls = json.loads(value)
+                    sizes = list(cover_urls.keys())
+                    value = f"{len(sizes)} Größen: {', '.join(sizes)}"
+                except (json.JSONDecodeError, AttributeError):
+                    value = "Cover-URLs verfügbar"
+            
+            elif desc in ['ENERGY', 'DANCEABILITY', 'VALENCE', 'ACOUSTICNESS']:
+                # Audio Features als Prozent anzeigen
+                try:
+                    feature_val = float(value)
+                    value = f"{feature_val * 100:.0f}%"
+                except ValueError:
+                    pass
+            
+            info['extended'][label] = value
 
 
 def _collect_cover_info(audio: MP3, info: Dict[str, Any]) -> None:
@@ -505,6 +580,65 @@ def _update_id3_tags(tags, tags_data: Dict[str, Any]) -> int:
         # Popularity als TXXX speichern
         if extended.get('popularity') and extended['popularity'] is not None:
             if _update_txxx_tag(tags, 'POPULARITY', str(extended['popularity'])):
+                updated_count += 1
+        
+        # Cover-URL als TXXX speichern
+        if extended.get('cover_url') and extended['cover_url']:
+            if _update_txxx_tag(tags, 'COVER_URL', str(extended['cover_url'])):
+                updated_count += 1
+            # Zusätzlich "Cover verfügbar" Status speichern
+            if _update_txxx_tag(tags, 'COVER_AVAILABLE', 'Ja (Spotify)'):
+                updated_count += 1
+            # Zusätzliche abgeleitete Cover-Informationen
+            if _update_txxx_tag(tags, 'COVER_STATUS', f'https://i.scdn.co/image{str(extended["cover_url"])[-20:]}...'):
+                updated_count += 1
+        
+        # Cover-URLs (verschiedene Größen) als TXXX speichern
+        if extended.get('cover_urls') and extended['cover_urls']:
+            # Konvertiere zu JSON-String für kompakte Speicherung
+            import json
+            cover_urls_json = json.dumps(extended['cover_urls'])
+            if _update_txxx_tag(tags, 'COVER_URLS', cover_urls_json):
+                updated_count += 1
+        
+        # Sources Used als TXXX speichern
+        if extended.get('sources_used') and extended['sources_used']:
+            sources_text = ', '.join(extended['sources_used'])
+            if _update_txxx_tag(tags, 'SOURCES_USED', sources_text):
+                updated_count += 1
+        
+        # Einzelne Audio Features als TXXX speichern (für bessere Lesbarkeit)
+        audio_feature_mapping = {
+            'energy': 'ENERGY',
+            'danceability': 'DANCEABILITY', 
+            'valence': 'VALENCE',
+            'acousticness': 'ACOUSTICNESS'
+        }
+        
+        for feature_key, tag_key in audio_feature_mapping.items():
+            if extended.get(feature_key) is not None:
+                feature_value = f"{extended[feature_key]:.3f}"
+                if _update_txxx_tag(tags, tag_key, feature_value):
+                    updated_count += 1
+        
+        # Abgeleitete/Duplikat-Felder für vollständige UI-Kompatibilität
+        # Diese sorgen dafür, dass nach dem Speichern alle ursprünglich angezeigten Felder wieder erscheinen
+        
+        # Erscheinungsjahr als Duplikat von Release Date
+        if extended.get('release_date'):
+            if _update_txxx_tag(tags, 'RELEASE_YEAR', str(extended['release_date'])):
+                updated_count += 1
+        
+        # Popularity als Duplikat (verschiedene Anzeigenamen)
+        if extended.get('popularity') is not None:
+            if _update_txxx_tag(tags, 'POPULARITY_ALT', f"{extended['popularity']}/100"):
+                updated_count += 1
+        
+        # Ähnliche Künstler als verkürzte Version
+        if extended.get('similar_artists') and extended['similar_artists']:
+            # Erste 3 Künstler für "Ähnlich wie"
+            short_artists = ', '.join(extended['similar_artists'][:3])
+            if _update_txxx_tag(tags, 'SIMILAR_ARTISTS_SHORT', short_artists):
                 updated_count += 1
     
     return updated_count
