@@ -129,6 +129,7 @@ class MP3TaggerGUI:
         cover_buttons = ttk.Frame(cover_frame)
         cover_buttons.pack(fill=tk.X, pady=(2, 0))
         
+        ttk.Button(cover_buttons, text="Cover anzeigen", command=self.show_covers, width=12).pack(side=tk.LEFT, padx=(0, 5))
         ttk.Button(cover_buttons, text="Cover laden", command=self.load_covers, width=12).pack(side=tk.LEFT, padx=(0, 5))
         ttk.Button(cover_buttons, text="Cover entfernen", command=self.remove_covers, width=12).pack(side=tk.LEFT)
         
@@ -264,9 +265,23 @@ class MP3TaggerGUI:
             
         self.mp3_files = files_data.get('files', [])
         
-        # Cover Manager für das neue Verzeichnis initialisieren
-        if files_data.get('directory'):
-            self.cover_manager = CoverManager(files_data['directory'])
+        # Cover Manager für das Verzeichnis initialisieren
+        # Wenn MP3-Dateien vorhanden sind, nutze das Verzeichnis der ersten Datei
+        # Ansonsten nutze das Hauptverzeichnis
+        cover_directory = files_data.get('directory')
+        if self.mp3_files and self.mp3_files[0].get('filepath'):
+            first_file_path = self.mp3_files[0]['filepath']
+            first_file_directory = os.path.dirname(first_file_path)
+            
+            # Prüfe ob es tatsächlich ein anderes Verzeichnis ist
+            if first_file_directory != cover_directory:
+                cover_directory = first_file_directory
+                print(f"📁 CoverManager wird für MP3-Verzeichnis initialisiert: {cover_directory}")
+            else:
+                print(f"📁 CoverManager wird für Hauptverzeichnis initialisiert: {cover_directory}")
+        
+        if cover_directory:
+            self.cover_manager = CoverManager(cover_directory)
         
         # Dateien in Treeview einfügen (erweiterte Spalten)
         for file_data in self.mp3_files:
@@ -290,8 +305,16 @@ class MP3TaggerGUI:
     
     def toggle_file_selection(self, event):
         """Schaltet die Auswahl einer Datei um"""
-        item = self.files_tree.selection()[0] if self.files_tree.selection() else None
-        if item:
+        # Ermittle welche Zeile geklickt wurde
+        item = self.files_tree.identify_row(event.y)
+        if not item:
+            return
+            
+        # Ermittle welche Spalte geklickt wurde
+        column = self.files_tree.identify_column(event.x)
+        
+        # Nur bei Klick auf die erste Spalte (Checkbox) reagieren
+        if column == '#1':  # #1 ist die erste Spalte (select)
             # Checkbox umschalten
             values = list(self.files_tree.item(item, 'values'))
             if values[0] == '☐':
@@ -344,6 +367,31 @@ class MP3TaggerGUI:
         else:
             self.selection_status.set("Keine Dateien ausgewählt")
 
+    def _update_file_in_table(self, file_data):
+        """Aktualisiert eine Datei in der Tabelle"""
+        try:
+            # Finde den entsprechenden Eintrag in der Tabelle
+            filename = file_data.get('filename', '')
+            
+            for item in self.files_tree.get_children():
+                values = list(self.files_tree.item(item, 'values'))
+                if values[1] == filename:  # Vergleiche Dateiname (Spalte 1)
+                    # Aktualisiere die Werte
+                    values[2] = file_data.get('title', '')      # Titel
+                    values[3] = file_data.get('artist', '')     # Künstler
+                    values[4] = file_data.get('album', '')      # Album
+                    values[5] = file_data.get('year', '')       # Jahr
+                    values[6] = file_data.get('track', '')      # Track
+                    values[7] = file_data.get('genre', '')      # Genre
+                    values[8] = file_data.get('cover_status', 'Nein')  # Cover
+                    values[9] = 'Aktualisiert'                  # Status
+                    
+                    self.files_tree.item(item, values=values)
+                    break
+                    
+        except Exception as e:
+            print(f"Fehler beim Aktualisieren der Tabelle: {e}")
+
     # === Integrierte Funktionen ===
     
     def recognize_with_shazam(self):
@@ -353,7 +401,18 @@ class MP3TaggerGUI:
             messagebox.showwarning("Warnung", "Bitte wählen Sie mindestens eine Datei aus.")
             return
             
-        messagebox.showinfo("Info", f"Shazam-Erkennung für {len(selected)} Dateien gestartet.\n(Implementierung folgt)")
+        # Audio Recognition Service initialisieren wenn nötig
+        if not self.audio_recognition:
+            acoustid_key = desktop_config.get_api_key('acoustid')
+            if not acoustid_key:
+                messagebox.showerror("Fehler", "AcoustID API-Key nicht konfiguriert. Bitte in config.env eintragen.")
+                return
+            self.audio_recognition = AudioRecognitionService(acoustid_key)
+        
+        self.status_var.set("Starte Shazam-Erkennung...")
+        
+        # Threading für Audio-Erkennung
+        threading.Thread(target=self._recognize_audio_worker, args=(selected, 'shazam'), daemon=True).start()
         
     def recognize_with_acoustid(self):
         """Audio-Erkennung mit AcoustID für ausgewählte Dateien"""
@@ -362,7 +421,152 @@ class MP3TaggerGUI:
             messagebox.showwarning("Warnung", "Bitte wählen Sie mindestens eine Datei aus.")
             return
             
-        messagebox.showinfo("Info", f"AcoustID-Erkennung für {len(selected)} Dateien gestartet.\n(Implementierung folgt)")
+        # Audio Recognition Service initialisieren wenn nötig
+        if not self.audio_recognition:
+            acoustid_key = desktop_config.get_api_key('acoustid')
+            if not acoustid_key:
+                messagebox.showerror("Fehler", "AcoustID API-Key nicht konfiguriert. Bitte in config.env eintragen.")
+                return
+            self.audio_recognition = AudioRecognitionService(acoustid_key)
+        
+        self.status_var.set("Starte AcoustID-Erkennung...")
+        
+        # Threading für Audio-Erkennung
+        threading.Thread(target=self._recognize_audio_worker, args=(selected, 'acoustid'), daemon=True).start()
+
+    def _recognize_audio_worker(self, selected_files, service_type):
+        """Worker-Thread für Audio-Erkennung"""
+        import asyncio
+        
+        async def process_files():
+            successful = 0
+            errors = 0
+            
+            for i, file_data in enumerate(selected_files):
+                try:
+                    filepath = file_data.get('filepath')
+                    filename = file_data.get('filename', 'Unbekannt')
+                    
+                    self.root.after(0, lambda f=filename: self.status_var.set(f"Erkenne: {f}..."))
+                    
+                    # Audio-Erkennung durchführen
+                    if service_type == 'shazam':
+                        # Für Shazam nutzen wir den Fallback-Mechanismus
+                        result = await self.audio_recognition._recognize_with_shazam(filepath)
+                    else:
+                        # Für AcoustID direkt
+                        result = await self.audio_recognition._recognize_with_acoustid(filepath)
+                    
+                    if result.get('success'):
+                        # Metadaten aktualisieren
+                        file_data['title'] = result.get('title', file_data.get('title', ''))
+                        file_data['artist'] = result.get('artist', file_data.get('artist', ''))
+                        if result.get('album'):
+                            file_data['album'] = result['album']
+                        if result.get('year'):
+                            file_data['year'] = str(result['year'])
+                        
+                        # UI aktualisieren
+                        self.root.after(0, lambda: self._update_file_in_table(file_data))
+                        successful += 1
+                        
+                        print(f"✅ {service_type} erfolgreich für {filename}: {result.get('artist')} - {result.get('title')}")
+                    else:
+                        errors += 1
+                        print(f"❌ {service_type} fehlgeschlagen für {filename}: {result.get('error')}")
+                        
+                except Exception as e:
+                    errors += 1
+                    print(f"💥 Fehler bei {filename}: {str(e)}")
+            
+            # Abschlussmeldung
+            self.root.after(0, lambda: self.status_var.set(f"{service_type} abgeschlossen: {successful} erfolgreich, {errors} Fehler"))
+            self.root.after(0, lambda: messagebox.showinfo("Audio-Erkennung", f"{service_type} Erkennung abgeschlossen.\n\nErfolgreich: {successful}\nFehler: {errors}"))
+        
+        try:
+            # Event Loop erstellen oder verwenden
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            loop.run_until_complete(process_files())
+        except Exception as e:
+            self.root.after(0, lambda: messagebox.showerror("Fehler", f"Fehler bei Audio-Erkennung: {str(e)}"))
+            self.root.after(0, lambda: self.status_var.set("Fehler bei Audio-Erkennung"))
+    
+    def show_covers(self):
+        """Zeigt verfügbare Cover für ausgewählte Dateien"""
+        selected = self.get_selected_files()
+        if not selected:
+            messagebox.showwarning("Warnung", "Bitte wählen Sie mindestens eine Datei aus.")
+            return
+            
+        # Für die erste ausgewählte Datei Cover anzeigen
+        first_file = selected[0]
+        filepath = first_file.get('filepath')
+        filename = first_file.get('filename', 'Unbekannt')
+        
+        if not filepath:
+            messagebox.showerror("Fehler", "Dateipfad nicht gefunden.")
+            return
+            
+        # Cover-Dialog öffnen
+        dialog = CoverSelectionDialog(self.root, filepath, filename, self.cover_manager)
+        result = dialog.show()
+        
+        if result:
+            # Ausgewähltes Cover auf alle selektierten Dateien anwenden
+            threading.Thread(target=self._apply_selected_cover_worker, args=(selected, result), daemon=True).start()
+
+    def _apply_selected_cover_worker(self, selected_files, cover_choice):
+        """Worker-Thread zum Anwenden des ausgewählten Covers"""
+        try:
+            successful = 0
+            errors = 0
+            
+            for file_data in selected_files:
+                try:
+                    filepath = file_data.get('filepath')
+                    filename = file_data.get('filename', 'Unbekannt')
+                    
+                    if not filepath:
+                        errors += 1
+                        continue
+                    
+                    self.root.after(0, lambda f=filename: self.status_var.set(f"Wende Cover an auf: {f}..."))
+                    
+                    # Cover Manager für das Verzeichnis dieser Datei
+                    file_directory = os.path.dirname(filepath)
+                    file_cover_manager = CoverManager(file_directory)
+                    
+                    # Cover anwenden
+                    result = file_cover_manager.apply_cover_to_directory(
+                        cover_source=cover_choice,
+                        selected_files=[filepath]
+                    )
+                    
+                    if result.get('success', 0) > 0:
+                        # Status aktualisieren
+                        size_info = f"{cover_choice.size[0]}px" if cover_choice.size else "Unbekannt"
+                        type_prefix = cover_choice.type[0].upper() if cover_choice.type else "?"
+                        file_data['cover_status'] = f"{type_prefix}{size_info}"
+                        
+                        self.root.after(0, lambda: self._update_file_in_table(file_data))
+                        successful += 1
+                        print(f"✅ Cover angewendet auf {filename}")
+                    else:
+                        errors += 1
+                        print(f"⚠️ Cover konnte nicht angewendet werden auf {filename}")
+                        
+                except Exception as e:
+                    errors += 1
+                    print(f"💥 Fehler beim Cover-Anwenden auf {filename}: {str(e)}")
+            
+            # Abschlussmeldung
+            self.root.after(0, lambda: self.status_var.set(f"Cover-Anwendung abgeschlossen: {successful} erfolgreich, {errors} Fehler"))
+            self.root.after(0, lambda: messagebox.showinfo("Cover-Management", f"Cover angewendet.\n\nErfolgreich: {successful}\nFehler: {errors}"))
+            
+        except Exception as e:
+            self.root.after(0, lambda: messagebox.showerror("Fehler", f"Fehler beim Cover-Anwenden: {str(e)}"))
+            self.root.after(0, lambda: self.status_var.set("Fehler beim Cover-Anwenden"))
         
     def load_covers(self):
         """Cover-Verwaltung für ausgewählte Dateien"""
@@ -371,7 +575,14 @@ class MP3TaggerGUI:
             messagebox.showwarning("Warnung", "Bitte wählen Sie mindestens eine Datei aus.")
             return
             
-        messagebox.showinfo("Info", f"Cover laden für {len(selected)} Dateien.\n(Implementierung folgt)")
+        if not self.cover_manager:
+            messagebox.showwarning("Warnung", "Bitte scannen Sie zuerst ein Verzeichnis.")
+            return
+            
+        self.status_var.set("Analysiere Cover...")
+        
+        # Threading für Cover-Analyse
+        threading.Thread(target=self._load_covers_worker, args=(selected,), daemon=True).start()
         
     def remove_covers(self):
         """Cover entfernen für ausgewählte Dateien"""
@@ -382,7 +593,158 @@ class MP3TaggerGUI:
             
         result = messagebox.askyesno("Bestätigung", f"Cover von {len(selected)} Dateien entfernen?")
         if result:
-            messagebox.showinfo("Info", f"Cover von {len(selected)} Dateien entfernt.\n(Implementierung folgt)")
+            self.status_var.set("Entferne Cover...")
+            
+            # Threading für Cover-Entfernung
+            threading.Thread(target=self._remove_covers_worker, args=(selected,), daemon=True).start()
+
+    def _load_covers_worker(self, selected_files):
+        """Worker-Thread für Cover-Laden"""
+        try:
+            successful = 0
+            errors = 0
+            
+            for file_data in selected_files:
+                try:
+                    filepath = file_data.get('filepath')
+                    filename = file_data.get('filename', 'Unbekannt')
+                    
+                    if not filepath:
+                        print(f"⚠️ Kein Dateipfad für {filename}")
+                        errors += 1
+                        continue
+                    
+                    self.root.after(0, lambda f=filename: self.status_var.set(f"Lade Cover für: {f}..."))
+                    
+                    # Cover Manager für das Verzeichnis dieser spezifischen Datei erstellen
+                    file_directory = os.path.dirname(filepath)
+                    file_cover_manager = CoverManager(file_directory)
+                    
+                    # Cover-Analyse für dieses spezifische Verzeichnis durchführen
+                    cover_info = file_cover_manager.analyze_directory_covers()
+                    
+                    print(f"🔍 Gefundene externe Cover für {filename}: {len(cover_info.external_cover_files)}")
+                    if cover_info.external_cover_files:
+                        print(f"📋 Cover-Dateien: {cover_info.external_cover_files}")
+                    
+                    # Prüfe, ob bereits Cover vorhanden
+                    current_status = file_data.get('cover_status', 'Nein')
+                    if current_status == 'Nein':
+                        # Versuche externe Cover zu finden und zuzuweisen
+                        if cover_info.external_cover_files:
+                            # Nehme das erste verfügbare externe Cover
+                            external_cover_path = cover_info.external_cover_files[0]
+                            
+                            # Finde die entsprechende CoverSource
+                            cover_source = None
+                            for source in cover_info.unique_covers:
+                                if source.type == 'external' and external_cover_path in source.path:
+                                    cover_source = source
+                                    break
+                            
+                            if cover_source:
+                                # Cover zu MP3 hinzufügen
+                                try:
+                                    result = file_cover_manager.apply_cover_to_directory(
+                                        cover_source=cover_source,
+                                        selected_files=[filepath]
+                                    )
+                                    
+                                    if result.get('success', 0) > 0:
+                                        # Status aktualisieren
+                                        file_data['cover_status'] = f"E{cover_source.size[0]}px"
+                                        self.root.after(0, lambda: self._update_file_in_table(file_data))
+                                        successful += 1
+                                        print(f"✅ Cover geladen für {filename}")
+                                    else:
+                                        print(f"⚠️ Cover konnte nicht angewendet werden für {filename}")
+                                        print(f"   Ergebnis: {result}")
+                                        errors += 1
+                                except Exception as cover_error:
+                                    print(f"⚠️ Fehler beim Anwenden des Covers für {filename}: {cover_error}")
+                                    errors += 1
+                            else:
+                                # Versuche direkt mit Dateipfad zu arbeiten
+                                try:
+                                    from tagger.cover_manager import CoverSource
+                                    from PIL import Image
+                                    
+                                    # Erstelle temporäre CoverSource
+                                    img = Image.open(external_cover_path)
+                                    temp_cover = CoverSource(
+                                        type='external',
+                                        path=external_cover_path,
+                                        size=img.size,
+                                        format=img.format,
+                                        hash='temp',
+                                        usage_count=0
+                                    )
+                                    
+                                    result = file_cover_manager.apply_cover_to_directory(
+                                        cover_source=temp_cover,
+                                        selected_files=[filepath]
+                                    )
+                                    
+                                    if result.get('success', 0) > 0:
+                                        file_data['cover_status'] = f"E{img.size[0]}px"
+                                        self.root.after(0, lambda: self._update_file_in_table(file_data))
+                                        successful += 1
+                                        print(f"✅ Cover geladen für {filename}")
+                                    else:
+                                        errors += 1
+                                        print(f"⚠️ Cover konnte nicht angewendet werden für {filename}")
+                                        print(f"   Ergebnis: {result}")
+                                except Exception as direct_error:
+                                    print(f"⚠️ Auch direkter Ansatz fehlgeschlagen für {filename}: {direct_error}")
+                                    errors += 1
+                        else:
+                            print(f"⚠️ Keine externen Cover gefunden für {filename}")
+                            errors += 1
+                    else:
+                        print(f"ℹ️ {filename} hat bereits Cover: {current_status}")
+                        
+                except Exception as e:
+                    errors += 1
+                    print(f"💥 Fehler beim Cover-Laden für {filename}: {str(e)}")
+            
+            # Abschlussmeldung
+            self.root.after(0, lambda: self.status_var.set(f"Cover-Laden abgeschlossen: {successful} erfolgreich, {errors} Fehler"))
+            self.root.after(0, lambda: messagebox.showinfo("Cover-Management", f"Cover-Laden abgeschlossen.\n\nErfolgreich: {successful}\nFehler: {errors}"))
+            
+        except Exception as e:
+            self.root.after(0, lambda: messagebox.showerror("Fehler", f"Fehler beim Cover-Laden: {str(e)}"))
+            self.root.after(0, lambda: self.status_var.set("Fehler beim Cover-Laden"))
+
+    def _remove_covers_worker(self, selected_files):
+        """Worker-Thread für Cover-Entfernung"""
+        try:
+            successful = 0
+            errors = 0
+            
+            # Sammle alle Dateipfade
+            file_paths = [file_data.get('filepath') for file_data in selected_files]
+            
+            # Entferne Cover von allen Dateien auf einmal
+            result = self.cover_manager.remove_covers_from_files(file_paths)
+            
+            if result.get('success'):
+                successful = result.get('files_processed', 0)
+                errors = result.get('errors', 0)
+                
+                # Aktualisiere die Datei-Daten
+                for file_data in selected_files:
+                    file_data['cover_status'] = 'Nein'
+                    self.root.after(0, lambda: self._update_file_in_table(file_data))
+            else:
+                errors = len(selected_files)
+            
+            # Abschlussmeldung
+            self.root.after(0, lambda: self.status_var.set(f"Cover-Entfernung abgeschlossen: {successful} erfolgreich, {errors} Fehler"))
+            self.root.after(0, lambda: messagebox.showinfo("Cover-Management", f"Cover-Entfernung abgeschlossen.\n\nErfolgreich: {successful}\nFehler: {errors}"))
+            
+        except Exception as e:
+            self.root.after(0, lambda: messagebox.showerror("Fehler", f"Fehler beim Cover-Entfernen: {str(e)}"))
+            self.root.after(0, lambda: self.status_var.set("Fehler beim Cover-Entfernen"))
         
     def enrich_with_lastfm(self):
         """Metadaten-Anreicherung mit Last.fm für ausgewählte Dateien"""
@@ -391,7 +753,19 @@ class MP3TaggerGUI:
             messagebox.showwarning("Warnung", "Bitte wählen Sie mindestens eine Datei aus.")
             return
             
-        messagebox.showinfo("Info", f"Last.fm-Anreicherung für {len(selected)} Dateien gestartet.\n(Implementierung folgt)")
+        # Extended Metadata Service initialisieren wenn nötig
+        if not self.extended_metadata:
+            self.extended_metadata = ExtendedMetadataService()
+            
+            # Prüfe ob Service verfügbar ist
+            if not self.extended_metadata.lastfm:
+                messagebox.showerror("Fehler", "Last.fm API-Key nicht konfiguriert. Bitte in config.env eintragen.")
+                return
+        
+        self.status_var.set("Starte Last.fm-Anreicherung...")
+        
+        # Threading für Metadaten-Anreicherung
+        threading.Thread(target=self._enrich_metadata_worker, args=(selected, 'lastfm'), daemon=True).start()
         
     def enrich_with_musicbrainz(self):
         """Metadaten-Anreicherung mit MusicBrainz für ausgewählte Dateien"""
@@ -400,7 +774,77 @@ class MP3TaggerGUI:
             messagebox.showwarning("Warnung", "Bitte wählen Sie mindestens eine Datei aus.")
             return
             
-        messagebox.showinfo("Info", f"MusicBrainz-Anreicherung für {len(selected)} Dateien gestartet.\n(Implementierung folgt)")
+        # Extended Metadata Service initialisieren wenn nötig
+        if not self.extended_metadata:
+            self.extended_metadata = ExtendedMetadataService()
+            
+            # Prüfe ob Service verfügbar ist
+            if not self.extended_metadata.lastfm and not self.extended_metadata.spotify:
+                messagebox.showerror("Fehler", "Keine Metadata-Services konfiguriert. Bitte API-Keys in config.env eintragen.")
+                return
+        
+        self.status_var.set("Starte MusicBrainz-Anreicherung...")
+        
+        # Threading für Metadaten-Anreicherung
+        threading.Thread(target=self._enrich_metadata_worker, args=(selected, 'musicbrainz'), daemon=True).start()
+
+    def _enrich_metadata_worker(self, selected_files, service_type):
+        """Worker-Thread für Metadaten-Anreicherung"""
+        from tagger.extended_metadata import get_extended_metadata_sync
+        
+        successful = 0
+        errors = 0
+        
+        for i, file_data in enumerate(selected_files):
+            try:
+                filename = file_data.get('filename', 'Unbekannt')
+                title = file_data.get('title', '')
+                artist = file_data.get('artist', '')
+                
+                if not title or not artist:
+                    print(f"⚠️ Überspringe {filename}: Titel oder Künstler fehlt")
+                    errors += 1
+                    continue
+                
+                self.root.after(0, lambda f=filename: self.status_var.set(f"Anreicherung für: {f}..."))
+                
+                # Metadaten-Anreicherung durchführen
+                enriched_metadata = get_extended_metadata_sync(
+                    artist=artist,
+                    title=title,
+                    album=file_data.get('album', '')
+                )
+                
+                if enriched_metadata:
+                    # Metadaten aktualisieren
+                    if enriched_metadata.genres and not file_data.get('genre'):
+                        file_data['genre'] = ', '.join(enriched_metadata.genres[:3])  # Erste 3 Genres
+                    
+                    if enriched_metadata.release_date and not file_data.get('year'):
+                        # Jahr aus release_date extrahieren
+                        try:
+                            year = enriched_metadata.release_date.split('-')[0]
+                            if year.isdigit():
+                                file_data['year'] = year
+                        except:
+                            pass
+                    
+                    # UI aktualisieren
+                    self.root.after(0, lambda: self._update_file_in_table(file_data))
+                    successful += 1
+                    
+                    print(f"✅ {service_type} erfolgreich für {filename}")
+                else:
+                    errors += 1
+                    print(f"❌ {service_type} fehlgeschlagen für {filename}")
+                    
+            except Exception as e:
+                errors += 1
+                print(f"💥 Fehler bei {filename}: {str(e)}")
+        
+        # Abschlussmeldung
+        self.root.after(0, lambda: self.status_var.set(f"{service_type} abgeschlossen: {successful} erfolgreich, {errors} Fehler"))
+        self.root.after(0, lambda: messagebox.showinfo("Metadaten-Anreicherung", f"{service_type} Anreicherung abgeschlossen.\n\nErfolgreich: {successful}\nFehler: {errors}"))
 
     def edit_selected_metadata(self):
         """Öffnet den Metadaten-Editor für ausgewählte Dateien"""
@@ -409,32 +853,63 @@ class MP3TaggerGUI:
             messagebox.showwarning("Warnung", "Bitte wählen Sie mindestens eine Datei aus.")
             return
             
-        # Batch-Editor öffnen
-        editor = BatchMetadataEditorDialog(self.root, selected)
-        if editor.result:
-            messagebox.showinfo("Info", f"Metadaten für {len(selected)} Dateien bearbeitet.\n(Implementierung folgt)")
+        if len(selected) == 1:
+            # Einzeldatei-Editor
+            self.edit_single_file_metadata(selected[0])
+        else:
+            # Batch-Editor
+            self.edit_batch_metadata(selected)
+
+    def edit_single_file_metadata(self, file_data):
+        """Öffnet den Einzeldatei-Metadaten-Editor"""
+        try:
+            editor = MetadataEditorDialog(self.root, file_data, self.mp3_processor)
+            
+            # Modal warten
+            self.root.wait_window(editor.dialog)
+            
+            if editor.result:
+                # Datei-Daten aktualisieren
+                file_data.update(editor.result)
+                
+                # UI aktualisieren
+                self._update_file_in_table(file_data)
+                
+                self.status_var.set(f"Metadaten für {file_data['filename']} aktualisiert")
+                
+        except Exception as e:
+            messagebox.showerror("Fehler", f"Fehler beim Öffnen des Metadaten-Editors: {str(e)}")
+
+    def edit_batch_metadata(self, selected_files):
+        """Öffnet den Batch-Metadaten-Editor"""
+        try:
+            editor = BatchMetadataEditorDialog(self.root, selected_files, self.mp3_processor)
+            
+            # Modal warten
+            self.root.wait_window(editor.dialog)
+            
+            if editor.result:
+                # Alle Dateien aktualisieren
+                for i, file_data in enumerate(selected_files):
+                    if i < len(editor.result):
+                        file_data.update(editor.result[i])
+                        
+                        # UI aktualisieren
+                        self._update_file_in_table(file_data)
+                
+                self.status_var.set(f"Metadaten für {len(selected_files)} Dateien aktualisiert")
+                
+        except Exception as e:
+            messagebox.showerror("Fehler", f"Fehler beim Öffnen des Batch-Editors: {str(e)}")
 
     def edit_file_metadata(self, event):
-        """Öffnet den Metadaten-Editor für eine einzelne Datei"""
+        """Öffnet den Metadaten-Editor für eine einzelne Datei (Doppelklick)"""
         item = self.files_tree.selection()[0] if self.files_tree.selection() else None
         if item:
             file_index = self.files_tree.index(item)
             if file_index < len(self.mp3_files):
                 file_info = self.mp3_files[file_index]
-                editor = MetadataEditorDialog(self.root, file_info)
-                if editor.result:
-                    # Aktualisiere die Anzeige
-                    updated_info = editor.result
-                    self.mp3_files[file_index] = updated_info
-                    # Treeview-Zeile aktualisieren
-                    values = list(self.files_tree.item(item, 'values'))
-                    values[2] = updated_info.get('title', '')  # Titel
-                    values[3] = updated_info.get('artist', '')  # Künstler
-                    values[4] = updated_info.get('album', '')  # Album
-                    values[5] = updated_info.get('year', '')  # Jahr
-                    values[6] = updated_info.get('track', '')  # Track
-                    values[7] = updated_info.get('genre', '')  # Genre
-                    self.files_tree.item(item, values=values)
+                self.edit_single_file_metadata(file_info)
 
     def save_selected_files(self):
         """Speichert die ausgewählten Dateien"""
@@ -464,6 +939,158 @@ class MP3TaggerGUI:
     def run(self):
         """Startet die Anwendung"""
         self.root.mainloop()
+
+
+
+class CoverSelectionDialog:
+    """Dialog zur Auswahl von Covern"""
+    
+    def __init__(self, parent, filepath, filename, cover_manager):
+        self.parent = parent
+        self.filepath = filepath
+        self.filename = filename
+        self.cover_manager = cover_manager
+        self.result = None
+        self.cover_info = None
+        
+        # Dialog erstellen
+        self.dialog = tk.Toplevel(parent)
+        self.dialog.title(f"Cover auswählen - {filename}")
+        self.dialog.geometry("600x500")
+        self.dialog.resizable(True, True)
+        
+        # Modal machen - mit Fehlerbehandlung
+        self.dialog.transient(parent)
+        try:
+            self.dialog.grab_set()
+        except tk.TclError:
+            pass
+        
+        # Zentrieren
+        self.center_dialog()
+        
+        # UI erstellen
+        self.create_ui()
+        
+        # Cover laden
+        self.load_covers()
+        
+    def center_dialog(self):
+        """Zentriert den Dialog"""
+        self.dialog.update_idletasks()
+        x = (self.dialog.winfo_screenwidth() // 2) - (self.dialog.winfo_width() // 2)
+        y = (self.dialog.winfo_screenheight() // 2) - (self.dialog.winfo_height() // 2)
+        self.dialog.geometry(f"+{x}+{y}")
+        
+    def create_ui(self):
+        """Erstellt die Benutzeroberfläche"""
+        main_frame = ttk.Frame(self.dialog, padding="10")
+        main_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        
+        self.dialog.columnconfigure(0, weight=1)
+        self.dialog.rowconfigure(0, weight=1)
+        main_frame.columnconfigure(0, weight=1)
+        main_frame.rowconfigure(1, weight=1)
+        
+        # Titel
+        title_label = ttk.Label(main_frame, text=f"Verfügbare Cover für: {self.filename}", 
+                               font=('Arial', 12, 'bold'))
+        title_label.grid(row=0, column=0, pady=(0, 10), sticky=tk.W)
+        
+        # Cover-Liste
+        list_frame = ttk.Frame(main_frame)
+        list_frame.grid(row=1, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), pady=(0, 10))
+        list_frame.columnconfigure(0, weight=1)
+        list_frame.rowconfigure(0, weight=1)
+        
+        # Treeview für Cover
+        columns = ('type', 'source', 'size', 'format')
+        self.covers_tree = ttk.Treeview(list_frame, columns=columns, show='headings', height=15)
+        
+        # Spalten konfigurieren
+        self.covers_tree.heading('type', text='Typ')
+        self.covers_tree.heading('source', text='Quelle')
+        self.covers_tree.heading('size', text='Größe')
+        self.covers_tree.heading('format', text='Format')
+        
+        self.covers_tree.column('type', width=80)
+        self.covers_tree.column('source', width=300)
+        self.covers_tree.column('size', width=100)
+        self.covers_tree.column('format', width=80)
+        
+        # Scrollbars
+        v_scrollbar = ttk.Scrollbar(list_frame, orient=tk.VERTICAL, command=self.covers_tree.yview)
+        self.covers_tree.configure(yscrollcommand=v_scrollbar.set)
+        
+        self.covers_tree.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        v_scrollbar.grid(row=0, column=1, sticky=(tk.N, tk.S))
+        
+        # Buttons
+        button_frame = ttk.Frame(main_frame)
+        button_frame.grid(row=2, column=0, pady=(10, 0), sticky=tk.E)
+        
+        ttk.Button(button_frame, text="Verwenden", command=self.select_cover).pack(side=tk.LEFT, padx=(0, 5))
+        ttk.Button(button_frame, text="Abbrechen", command=self.cancel).pack(side=tk.LEFT)
+        
+        # Status
+        self.status_label = ttk.Label(main_frame, text="Lade Cover...")
+        self.status_label.grid(row=3, column=0, pady=(5, 0), sticky=tk.W)
+        
+    def load_covers(self):
+        """Lädt verfügbare Cover"""
+        try:
+            # Cover Manager für das Verzeichnis der Datei
+            file_directory = os.path.dirname(self.filepath)
+            file_cover_manager = CoverManager(file_directory)
+            
+            # Cover-Analyse durchführen
+            self.cover_info = file_cover_manager.analyze_directory_covers()
+            
+            # Cover in Treeview anzeigen
+            for cover in self.cover_info.unique_covers:
+                type_text = cover.type.capitalize()
+                source_text = os.path.basename(cover.path) if cover.type == 'external' else cover.path
+                size_text = f"{cover.size[0]}x{cover.size[1]}"
+                format_text = cover.format
+                
+                self.covers_tree.insert('', 'end', values=(type_text, source_text, size_text, format_text))
+            
+            # Status aktualisieren
+            if self.cover_info.unique_covers:
+                self.status_label.config(text=f"{len(self.cover_info.unique_covers)} Cover gefunden")
+            else:
+                self.status_label.config(text="Keine Cover verfügbar")
+                
+        except Exception as e:
+            self.status_label.config(text=f"Fehler beim Laden: {str(e)}")
+            print(f"💥 Fehler beim Laden der Cover: {str(e)}")
+    
+    def select_cover(self):
+        """Wählt das ausgewählte Cover aus"""
+        selection = self.covers_tree.selection()
+        if not selection:
+            messagebox.showwarning("Warnung", "Bitte wählen Sie ein Cover aus.")
+            return
+            
+        # Index des ausgewählten Items
+        item = selection[0]
+        item_index = self.covers_tree.index(item)
+        
+        if item_index < len(self.cover_info.unique_covers):
+            self.result = self.cover_info.unique_covers[item_index]
+            self.dialog.destroy()
+        else:
+            messagebox.showerror("Fehler", "Ungültige Cover-Auswahl.")
+    
+    def cancel(self):
+        """Bricht die Auswahl ab"""
+        self.result = None
+        self.dialog.destroy()
+    
+    def show(self):
+        """Zeigt den Dialog und wartet auf Ergebnis"""
+        self.dialog.wait_window()
+        return self.result
 
 
 def main():

@@ -22,9 +22,13 @@ class MetadataEditorDialog:
         self.dialog.geometry("500x600")
         self.dialog.resizable(True, True)
         
-        # Modal machen
+        # Modal machen - mit Fehlerbehandlung
         self.dialog.transient(parent)
-        self.dialog.grab_set()
+        try:
+            self.dialog.grab_set()
+        except tk.TclError:
+            # Fallback wenn grab_set fehlschlägt
+            pass
         
         # Zentrieren
         self.center_dialog()
@@ -178,9 +182,13 @@ class BatchMetadataEditorDialog:
         self.dialog.geometry("600x500")
         self.dialog.resizable(True, True)
         
-        # Modal machen
+        # Modal machen - mit Fehlerbehandlung
         self.dialog.transient(parent)
-        self.dialog.grab_set()
+        try:
+            self.dialog.grab_set()
+        except tk.TclError:
+            # Fallback wenn grab_set fehlschlägt
+            pass
         
         # Zentrieren
         self.center_dialog()

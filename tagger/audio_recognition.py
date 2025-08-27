@@ -215,32 +215,52 @@ class AudioRecognitionService:
         best_match = None
         best_score = 0.0
         
-        for match in matches:
-            score = match.get('score', 0.0)
-            
-            # Nur Matches mit ausreichender Score berücksichtigen
-            if score < 0.7:
-                continue
-            
-            if 'recordings' in match:
-                for recording in match['recordings']:
-                    title = recording.get('title', '').strip()
+        try:
+            # Prüfe ob matches ein String ist (Fehlerfall)
+            if isinstance(matches, str):
+                print(f"🚨 AcoustID matches ist ein String: {matches}")
+                return None
+                
+            # Prüfe ob matches iterierbar ist
+            if not hasattr(matches, '__iter__'):
+                print(f"🚨 AcoustID matches ist nicht iterierbar: {type(matches)}")
+                return None
+        
+            for match in matches:
+                if not isinstance(match, dict):
+                    continue
                     
-                    # Artist aus verschiedenen Quellen extrahieren
-                    artist = ''
-                    if 'artists' in recording and recording['artists']:
-                        artist = recording['artists'][0].get('name', '').strip()
-                    
-                    if title and artist and score > best_score:
-                        best_score = score
-                        best_match = {
-                            'title': title,
-                            'artist': artist,
-                            'confidence': score,
-                            'score': score,
-                            'release_group': recording.get('releasegroups', [{}])[0].get('title') if recording.get('releasegroups') else None,
-                            'release': recording.get('releases', [{}])[0].get('title') if recording.get('releases') else None
-                        }
+                score = match.get('score', 0.0)
+                
+                # Nur Matches mit ausreichender Score berücksichtigen
+                if score < 0.7:
+                    continue
+                
+                if 'recordings' in match:
+                    for recording in match['recordings']:
+                        if not isinstance(recording, dict):
+                            continue
+                            
+                        title = recording.get('title', '').strip()
+                        
+                        # Artist aus verschiedenen Quellen extrahieren
+                        artist = ''
+                        if 'artists' in recording and recording['artists']:
+                            artist = recording['artists'][0].get('name', '').strip()
+                        
+                        if title and artist and score > best_score:
+                            best_score = score
+                            best_match = {
+                                'title': title,
+                                'artist': artist,
+                                'confidence': score,
+                                'score': score,
+                                'release_group': recording.get('releasegroups', [{}])[0].get('title') if recording.get('releasegroups') else None,
+                                'release': recording.get('releases', [{}])[0].get('title') if recording.get('releases') else None
+                            }
+        except Exception as e:
+            print(f"🚨 Fehler in _find_best_acoustid_match: {str(e)}")
+            return None
         
         return best_match
     
