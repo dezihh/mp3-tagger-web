@@ -1,11 +1,6 @@
-# Copilot Instructions for MP3 Tagger Web Application
+# Copilot Instructions for MP3 Tagger Python Desktop-tkinter Application
 
 ## Big Picture Architecture
-- Modular Flask web application for MP3 metadata management and enrichment
-- Main entry: `app.py` (Flask server, routes, workflow orchestration)
-- Core logic in `tagger/` (ID3, cover, enrichment, audio recognition)
-- UI templates in `templates/` (Jinja2)
-- Static assets in `static/` (CSS, JS, images)
 - Configuration via `config.env` (API keys, runtime settings)
 
 ## Workflow & Data Flow
@@ -21,18 +16,15 @@
 - Use Python 3 with venv (see README)
 - Install dependencies: `pip install -r requirements.txt`
 - activate venv: `source venv/bin/activate` (Linux/Mac) or `venv\Scripts\activate` (Windows)
-- Run server: `python app.py` (default port 5000)
-- Test modular code in `tagger/` via `examples_modular_usage.py` or `tests/`
+- Run server: `ource venv/bin/activate && python start_desktop.py` 
 - Manage and save tests in `tests/` (unit tests for `tagger/` logic)
-- Static/JS/CSS changes require browser reload
 
 ## Project-Specific Patterns
-- All enrichment, recognition, and parsing logic is in `tagger/` modules (see `core.py`, `audio_recognition.py`, etc.)
+- All enrichment, recognition, and parsing logic is in `tagger/` modules 
 - UI: Table-based, inline editing, batch selection via checkboxes
 - Cover status: `I<px>`, `E<px>`, `B<px>`, `Nein` (see README for meaning)
 - Track number formatting: configurable digits, leading zeros, bulk update
 - API keys and config: only in `config.env`, never hardcoded
-- Results pages: `results.html`, 
 
 ## Integration Points
 - External APIs: DiscoGS, hazamIO, AcoustID, MusicBrainz, Last.fm, Discogs (see README for config)
@@ -40,8 +32,6 @@
 - JS in `static/script.js` for UI interactivity
 
 ## Conventions & Examples
-- New features: add to `tagger/` as separate module, import in `core.py`
-- UI changes: update Jinja2 templates and corresponding JS/CSS
 - For new workflows, follow README's staged process and table UI
 - Use batch operations for multi-file actions (checkboxes, bulk save)
 - Always document new modules and workflows in README
