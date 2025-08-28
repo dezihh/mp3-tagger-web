@@ -1,17 +1,27 @@
-# MP3 Tagger Web Application
+# MP## ✨ Haupt-Features
 
-Eine moderne, webbasierte Anwendung zur Verwaltung und Bearbeitung von MP3-Metadaten mit erweiterten Features wie Hover-Tooltips, Batch-Bearbeitung und automatischen Checkbox-Aktivierung.
+- **📁 Verzeichnis-Scanner**: Automatisches Erkennen aller MP3-Dateien
+- **🎵 Audio-Vorhören**: Integrierter Audio-Player mit Play/Pause/Stop-Funktionen
+- **📝 Inline-Editing**: Direkte Bearbeitung in der Tabelle
+- **✅ Smart Checkboxes**: Automatische Auswahl bei Feldänderungen  
+- **📊 Batch-Operationen**: Mehrere Dateien gleichzeitig bearbeiten
+- **🎤 Audio-Erkennung**: Automatische Titel/Künstler-Erkennung via AcoustID/Shazam
+- **🖼️ Cover-Management**: Cover anzeigen, laden und verwalten
+- **🎯 Metadaten-Anreicherung**: Last.fm und MusicBrainz Integration
+- **💾 Robuste Speicher-Funktionen**: Sichere Tag- und Cover-Speicherungesktop Application
+
+Eine moderne Python-Desktop-Anwendung (tkinter) zur Verwaltung und Bearbeitung von MP3-Metadaten mit erweiterten Features wie Audio-Erkennung, Cover-Management und Metadaten-Anreicherung.
 
 ## ✨ Haupt-Features
 
-- **🔍 Hover-Tooltips**: Detaillierte MP3-Informationen bei Dateiname-Hover
-- **📝 Batch-Bearbeitung**: Mehrere Dateien gleichzeitig bearbeiten
-- **✅ Smart Checkboxes**: Automatische Aktivierung bei Feldänderungen  
-- **📊 Progress-Bar**: Visuelles Feedback beim Speichern ohne störende Dialoge
-- **🎵 Audio-Preview**: Integrierte MP3-Wiedergabe
-- **🖼️ Cover-Anzeige**: Pixelauflösung und Thumbnail-Vorschau
-- **📱 Responsive Design**: Optimiert für verschiedene Bildschirmgrößen
-- **🎯 Audio-Erkennung**: Automatische Titel- und Künstler-Erkennung via AcoustID/Shazam
+- **� Verzeichnis-Scanner**: Automatisches Erkennen aller MP3-Dateien
+- **📝 Inline-Editing**: Direkte Bearbeitung in der Tabelle
+- **✅ Smart Checkboxes**: Automatische Auswahl bei Feldänderungen  
+- **📊 Batch-Operationen**: Mehrere Dateien gleichzeitig bearbeiten
+- **🎵 Audio-Erkennung**: Automatische Titel/Künstler-Erkennung via AcoustID/Shazam
+- **🖼️ Cover-Management**: Cover anzeigen, laden und verwalten
+- **🎯 Metadaten-Anreicherung**: Last.fm und MusicBrainz Integration
+- **💾 Robuste Speicher-Funktionen**: Sichere Tag- und Cover-Speicherung
 
 ## 🎼 Audio-Erkennung System
 
@@ -27,62 +37,119 @@ Eine moderne, webbasierte Anwendung zur Verwaltung und Bearbeitung von MP3-Metad
 
 ## 🚀 Schnellstart
 
-1. **Verzeichnis auswählen**: MP3-Verzeichnis auf der Startseite eingeben
-2. **Dateien scannen**: Automatischer Scan aller MP3-Dateien mit Metadaten-Extraktion
-3. **Audio-Erkennung** (optional): Button "� Audio-Erkennung" für fehlende Tags
-4. **Tags bearbeiten**: Direkte Bearbeitung in der Tabelle (Auto-Checkbox-Aktivierung)
-5. **Batch-Speichern**: Ausgewählte Änderungen mit Progress-Bar speichern
+1. **Virtual Environment aktivieren**: `source venv/bin/activate`
+2. **Anwendung starten**: `python start_desktop.py`
+3. **Verzeichnis auswählen**: MP3-Verzeichnis über "Durchsuchen" Button wählen
+4. **Dateien scannen**: Automatischer Scan aller MP3-Dateien mit Metadaten-Extraktion
+5. **Audio-Vorhören**: MP3-Dateien über Rechtsklick → "🎵 Vorhören" oder Leertaste abspielen
+6. **Audio-Erkennung** (optional): Buttons "Shazam" oder "AcoustID" für fehlende Tags
+7. **Tags bearbeiten**: Direkte Bearbeitung in der Tabelle (Auto-Checkbox-Aktivierung)
+8. **Batch-Speichern**: Ausgewählte Änderungen über "Speichern" Button sichern
 
-### **Audio-Erkennung verwenden**
-- **Automatische Erkennung**: Dateien ohne Titel/Künstler werden automatisch identifiziert
-- **Ein-Klick-Start**: Button "🎵 Audio-Erkennung" startet Batch-Verarbeitung
-- **Erkannte Tags**: Werden kursiv und grün markiert angezeigt
-- **Speichern**: Erkannte Werte werden erst beim manuellen Speichern übernommen
+## 🎵 Audio-Vorhören System
+
+### **Integrierter Audio-Player**
+- **Unterstützte Formate**: MP3-Dateien (pygame-basiert)
+- **Steuerung**: Play/Pause/Stop-Buttons im Player-Widget
+- **Position**: Fortschrittsbalken mit Seek-Funktionalität
+- **Lautstärke**: Einstellbare Lautstärke von 0-100%
+- **Echtzeitinfo**: Anzeige von aktueller Position und Gesamtdauer
+
+### **Bedienung**
+- **Rechtsklick-Menü**: "🎵 Vorhören" für ausgewählte Datei (startet automatisch)
+- **Keyboard-Shortcuts**: 
+  - `Leertaste`: Datei laden und automatisch abspielen
+  - `Enter`: Play/Pause umschalten
+- **Player-Widget**: Vollständige Kontrolle über Wiedergabe
+- **Status-Anzeige**: Aktuelle Datei und Wiedergabe-Status in der Statusleiste
+
+### **Desktop-spezifische Features**
+- **Cover-Dialog**: Button "Cover anzeigen" öffnet Auswahl-Dialog mit Vorschau
+- **Inline-Editing**: Doppelklick auf Zellen zur direkten Bearbeitung
+- **Batch-Metadata-Editor**: Dialog für gemeinsame Änderungen an mehreren Dateien
+- **Threading**: Alle zeitaufwändigen Operationen laufen im Hintergrund
 
 ## 🏗️ Architektur & Module
 
-### **Frontend (HTML/CSS/JavaScript)**
-- **`templates/index.html`**: Hauptseite mit Verzeichnisauswahl
-- **`templates/results.html`**: Optimierte Ergebnisansicht mit modularem JavaScript und Progress-Tracking
-- **`static/styles.css`**: Moderne CSS-Datei mit Responsive Design
-- **`static/utils.js`**: JavaScript-Utilities für UI-Interaktionen
+### **Desktop-Anwendung (Python/tkinter)**
+- **`mp3_tagger_gui.py`**: Haupt-GUI mit tkinter-Interface und Event-Handling
+- **`start_desktop.py`**: Startskript mit Dependency-Prüfung und Umgebungs-Setup
 
-### **Backend (Python/Flask)**
-- **`app.py`**: Flask-Anwendung mit API-Endpoints und Workflow-Orchestrierung
+### **Backend-Module (Python)**
+- **`tagger/audio_player.py`**: Audio-Player-Engine mit pygame für MP3-Wiedergabe
+- **`tagger/audio_player_widget.py`**: GUI-Widget für Audio-Player-Steuerung
+- **`tagger/desktop_mp3_processor.py`**: Desktop-spezifische MP3-Verarbeitung
 - **`tagger/mp3_processor.py`**: Kern-MP3-Verarbeitung und Metadaten-Extraktion
-- **`tagger/utils.py`**: Grundlegende Utilities für MP3-Tag-Operationen
-- **`tagger/extended_metadata.py`**: Erweiterte Metadaten-Anreicherung (Spotify, Last.fm)
 - **`tagger/audio_recognition.py`**: Audio-Fingerprinting (AcoustID/Shazam)
-- **`tagger/album_recognition.py`**: Album-Erkennung mit Progress-Tracking
+- **`tagger/extended_metadata.py`**: Erweiterte Metadaten-Anreicherung (Last.fm, MusicBrainz)
+- **`tagger/cover_manager.py`**: Cover-Erkennung, -Analyse und -Management
+- **`tagger/metadata_editor.py`**: Batch-Metadata-Editor-Dialoge
+- **`tagger/desktop_config.py`**: Desktop-spezifische Konfiguration
+- **`tagger/utils.py`**: Grundlegende Utilities für MP3-Tag-Operationen
 - **`tagger/http_client.py`**: Zentralisierte HTTP-Client-Utilities mit Rate-Limiting
 - **`tagger/directory_history.py`**: Verzeichnis-Verlauf Management
-2. **AcoustID-Erkennung** (Fallback): MusicBrainz-basierte Metadaten
-3. **Intelligente Segmentierung**: Verschiedene Audio-Abschnitte für bessere Trefferquote
+### **Desktop-Workflow**
+- **Verzeichnis-Auswahl**: File-Dialog oder manuelle Eingabe
+- **Tabellen-Ansicht**: Eine Zeile pro MP3-Datei mit editierbaren Feldern
+- **Checkbox-System**: Datei-Auswahl für Batch-Operationen
+- **Threading**: Asynchrone Verarbeitung für Audio-Erkennung und Metadaten-Anreicherung
+- **Dialoge**: Modal-Dialoge für Cover-Auswahl und Batch-Metadaten-Bearbeitung
 
-**Button pro Datei**: "🎵 Erkennen" startet Audio-Fingerprinting
-Die Felder Track#, Artist, Titel sowie Album sollen manuell editierbar bleiben
+### **Audio-Erkennung**
+1. **Shazam-Integration**: Hochgenaue Musik-Erkennung über ShazamIO
+2. **AcoustID-Erkennung**: MusicBrainz-basierte Metadaten-Zuordnung
+3. **Asynchrone Verarbeitung**: Keine Blockierung der GUI
+4. **Visuelle Kennzeichnung**: Erkannte Tags werden markiert dargestellt
 
-#### **Stufe 4: Metadaten-Anreicherung (selektiv)**
-Für markierte Dateien → **Erweiterte Anreicherung**:
+**Bedienung**: Buttons "Shazam" oder "AcoustID" für ausgewählte Dateien
 
-1. **Online-Metadaten**: MusicBrainz + Last.fm für zusätzliche Informationen
-2. **Cover-Suche**: Hochauflösende Cover-Art von verschiedenen Quellen  
-3. **Erweiterte Tags**: Genre-Details, Mood, Era, MusicBrainz-IDs
-4. **Album-Kontext**: Intelligente Album-Erkennung für ganze Verzeichnisse
+### **Metadaten-Anreicherung**
+1. **Last.fm-Integration**: Zusätzliche Metadaten und Künstler-Informationen
+2. **MusicBrainz-Abfrage**: Standardisierte Musik-Datenbank
+3. **Batch-Verarbeitung**: Mehrere Dateien gleichzeitig verarbeiten
+4. **Smart-Caching**: Vermeidung redundanter API-Calls
 
-**Button für markierte Dateien**: "🌐 Metadaten anreichern"
+**Bedienung**: Buttons "Last.fm" oder "MusicBrainz" für ausgewählte Dateien
+
+### **Cover-Management**
+1. **Cover-Erkennung**: Automatische Detektion interner und externer Cover
+2. **Cover-Dialog**: Vorschau und Auswahl verfügbarer Cover mit Thumbnail-Ansicht
+3. **Cover-Operationen**: Laden, Entfernen, Ersetzen von Cover-Art
+4. **Prioritäts-System**: Intelligente Auswahl zwischen internen und externen Covern
+
+**Bedienung**: Buttons "Cover anzeigen", "Cover laden", "Cover entfernen"
+
+### **Album-Erkennung**
+1. **MusicBrainz-Integration**: Kostenlose, umfassende Musikdatenbank
+2. **Discogs-Fallback**: Kommerzielle Musikdatenbank für erweiterte Informationen
+3. **Konfidenz-Bewertung**: Nur Übereinstimmungen >70% werden automatisch angewendet
+4. **Intelligente Zuordnung**: Automatische Track-Nummer-Extraktion aus Album-Informationen
+
+**Bedienung**: Button "Album erkennen" für ausgewählte Dateien
+
+### **Erweiterte Batch-Funktionen**
+1. **Auto-Track-Nummerierung**: Automatische Vergabe von Track-Nummern (01, 02, 03...)
+2. **Sortierung**: Alphabetische Reihenfolge basierend auf Dateinamen
+3. **Format-Konsistenz**: Führende Nullen für einheitliche Darstellung
+4. **Batch-Metadaten-Editor**: Gemeinsame Änderungen an mehreren Dateien
+
+**Bedienung**: Button "Track-Nr." für automatische Nummerierung
 
 ---
 
-### 1. Grundfunktionalität
+### 1. Grundfunktionalität (Desktop)
 
+**Tabellen-Interface:**
+- Eine Zeile pro MP3-Datei mit editierbaren Spalten
+- Spalten: Checkbox, Dateiname, Track-Nummer, Artist, Titel, Album, Genre, Cover-Status
+- Doppelklick auf Zellen für Inline-Editing
+- Aktuelles Verzeichnis wird in der Titelleiste angezeigt
+- Intelligente Checkbox-Aktivierung bei Feldänderungen
 
-**Datenanzeige:**
-- Tabellensicht mit einer Zeile pro MP3-Datei
-- Spalten: Dateiname, Track-Nummer, Artist, Titel, Album, Genre, Cover-Status
-- Aktuelles Verzeichnis wird über der Tabelle angezeigt
-- Hover-Details zeigen erweiterte ID3-Informationen
-- Checkbox vor jeder MP3 Datei, für jedes Verzeichnis, für alle Dateien zur Auswahl
+**Datei-Auswahl:**
+- Checkbox vor jeder MP3-Datei für individuelle Auswahl
+- "Alle auswählen" / "Alle abwählen" Buttons
+- Status-Anzeige für Anzahl ausgewählter Dateien
 
 ### 2. Cover-System
 
@@ -105,95 +172,82 @@ Für markierte Dateien → **Erweiterte Anreicherung**:
 - **Last.fm**: Album-Artwork
 - **Discogs**: Release-Cover
 
-### 3. Bearbeitungsmodus
+### 3. Bearbeitungsmodus (Desktop)
 
-**Editierbare Felder:**
-- Artist, Titel, Album, Track-Nummer
-- Inline-Bearbeitung direkt in der Tabelle
-- Visuelle Kennzeichnung geänderter Felder
+**Inline-Editing:**
+- Doppelklick auf Zellen für direkte Bearbeitung
+- Editierbare Felder: Artist, Titel, Album, Track-Nummer, Genre
+- Enter zum Bestätigen, Escape zum Abbrechen
+- Automatische Checkbox-Aktivierung bei Änderungen
 
-**Track-Nummer-Verwaltung:**
-- **Flexible Stellenzahl**: 1, 2 oder 3 Stellig konfigurierbar
-- **Führende Nullen**: Automatische Formatierung (01, 001, etc.)
-- **Live-Formatierung**: Eingabe wird sofort formatiert angezeigt
-- **Bulk-Update**: Stellenzahl-Änderung aktualisiert alle Track-Nummern
-- **Intelligente Erkennung**: Aus Dateinamen extrahierte Track-Nummern
+**Batch-Metadaten-Editor:**
+- Modal-Dialog für gemeinsame Änderungen an mehreren Dateien
+- Auswahl der zu ändernden Felder über Checkboxes
+- Vorschau der Änderungen vor Anwendung
 
-**Track-Konfiguration:**
-- Dropdown-Auswahl für Stellenzahl (1-3 Stellen)
-- Sofortige Anwendung auf alle sichtbaren Tracks
-- Beibehaltung der numerischen Werte bei Format-Änderung
+**Track-Nummer-Management:**
+- Automatische Formatierung mit führenden Nullen
+- Intelligente Extraktion aus Dateinamen
+- Konsistente Darstellung in der Tabelle
 
-**Auswahl-System:**
-- Checkboxen für einzelne Dateien
-- "Alle markieren" / "Alle abwählen" Buttons
-- Verarbeitung nur für markierte Dateien
-
-### 4. Erweiterte Funktionen
+### 4. Erweiterte Funktionen (Desktop)
 
 **Audio-Erkennung:**
-- Button pro Datei für Audio-Fingerprinting
-- Verwendet Shazam/AcoustID für Metadaten-Erkennung
-- Ersetzt/ergänzt fehlende ID3-Tags
+- Separate Buttons für Shazam und AcoustID
+- Asynchrone Verarbeitung im Hintergrund
+- Progress-Feedback über Status-Bar
+- Automatische Markierung erkannter Dateien
 
-**Dateiname-Parsing:**
-- Automatische Erkennung bei fehlenden ID3-Tags
-- Beige Hintergrund für erkannte Daten
-- **Track-Erkennung**: Intelligente Extraktion aus Dateinamen
-  - Muster: `"01 - Title.mp3"`, `"001 Track.mp3"`, `"Artist - 05 - Title.mp3"`
-  - Führende Nullen werden erkannt und beibehalten
-  - Track-Position am Dateianfang oder nach Artist-Namen
-- **Weitere Muster**: `"Artist - Title.mp3"`, `"Album/01 - Title.mp3"`
+**Metadaten-Anreicherung:**
+- Last.fm Integration für erweiterte Metadaten
+- MusicBrainz für standardisierte Musikdatenbank-Informationen
+- Batch-Verarbeitung für ausgewählte Dateien
+- Intelligentes Caching zur Performance-Optimierung
 
-**Audio-Player:**
-- Play-Button pro Datei
-- Einfacher Inline-Player zum Vorhören
-- Keine komplexe Playlist-Funktionalität
+**Cover-Management:**
+- Cover-Auswahl-Dialog mit Thumbnail-Vorschau
+- Unterstützung für interne und externe Cover
+- Cover-Status-Anzeige: `I<px>`, `E<px>`, `B<px>`, `Nein`
+- Cover-Operationen: Laden, Anzeigen, Entfernen
 
-### 5. Speicher-Workflow
+### 5. Speicher-Workflow (Desktop)
 
-**Einfacher Speicher-Prozess:**
-1. Dateien markieren
-2. "Speichern" Button
-3. Bestätigung zeigen
-4. Metadaten in MP3-Dateien schreiben
-5. Cover-Operationen durchführen (falls gewünscht)
-6. Erfolgs-/Fehlermeldung anzeigen
+**Desktop-Speicher-Prozess:**
+1. Dateien über Checkboxes markieren
+2. "Speichern" Button in der Funktions-Toolbar
+3. Asynchrone Verarbeitung mit Threading
+4. Status-Updates über Status-Bar
+5. Erfolgs-/Fehlermeldung über Message-Box
 
-**Cover-Verwaltung beim Speichern:**
-- **Automatisch**: Neue Cover werden eingebettet wenn keine vorhanden
-- **Benutzer-Auswahl**: Cover behalten/ersetzen/löschen bei vorhandenen Covern
-- **Qualitäts-Prüfung**: Höhere Auflösung wird bevorzugt
-- **Format-Unterstützung**: JPEG, PNG (wird zu JPEG konvertiert für MP3)
+**Robuste Operationen:**
+- Atomare Speicher-Operationen pro Datei
+- Umfassende Fehlerbehandlung und Logging
+- Backup-Mechanismen für kritische Operationen
+- Thread-sichere GUI-Updates
 
-**Vereinfachte Cover-Operationen:**
-- Fokus auf Metadaten-Bearbeitung
-- Cover als Zusatz-Feature, nicht Hauptfunktion
-- Keine komplexen Cover-Auswahl-Dialoge
+## 🎨 UI/UX Philosophie (Desktop)
 
-## 🎨 UI/UX Philosophie
+### Native Desktop-Experience
+- Native tkinter-Widgets für plattformspezifisches Look-and-Feel
+- Responsive Layout mit Grid- und Pack-Managern
+- Modal-Dialoge für komplexe Interaktionen
+- Keyboard-Shortcuts für häufige Aktionen
 
-### Einfachheit vor Features
-- Klare, übersichtliche Tabelle als Hauptansicht
-- Minimale Modal-Dialoge
-- Direktes Feedback bei Aktionen
-- Keine verschachtelten Menüs oder komplexe Workflows
+### Threading und Performance
+- Asynchrone Verarbeitung für zeitaufwändige Operationen
+- Non-blocking GUI für bessere Benutzererfahrung
+- Intelligentes Caching zur Performance-Optimierung
+- Effiziente Batch-Operationen
 
 ### Benutzerfreundlichkeit
-- Intuitive Bedienung ohne Anleitung
-- Schnelle Bearbeitung vieler Dateien
-- Fehlertolerante Eingabe
-- Klare visuelle Rückmeldungen
-
-### Performance
-- Schnelles Laden von Verzeichnissen
-- Responsive Tabelle auch bei vielen Dateien
-- Asynchrone Audio-Erkennung
-- Batch-Operationen für markierte Dateien
+- Intuitive Bedienung ohne Einarbeitung
+- Klare visuelle Rückmeldungen über Status-Bar
+- Fehlertolerante Eingabe mit Validierung
+- Automatische Checkbox-Aktivierung bei Änderungen
 
 ## 🔧 Technische Anforderungen
 
-### **Entwicklungsumgebung**
+### **Desktop-Entwicklungsumgebung**
 ```bash
 # Virtuelles Environment erstellen und aktivieren
 python -m venv venv
@@ -203,9 +257,18 @@ source venv/bin/activate  # Linux/Mac
 # Abhängigkeiten installieren
 pip install -r requirements.txt
 
-# Server starten (Standard Port 5000)
-python app.py
+# Desktop-Anwendung starten
+python start_desktop.py
 ```
+
+### **Abhängigkeiten**
+- **Python 3.8+**: Basis-Interpreter
+- **tkinter**: GUI-Framework (meist mit Python vorinstalliert)
+- **mutagen**: MP3-Metadaten-Bearbeitung
+- **Pillow (PIL)**: Bildverarbeitung für Cover
+- **requests**: HTTP-Client für API-Calls
+- **asyncio**: Asynchrone Verarbeitung
+- **threading**: GUI-Threading für Non-blocking Operations
 
 ### **API-Services und Konfiguration**
 
@@ -223,71 +286,86 @@ python app.py
 ACOUSTID_API_KEY=your_acoustid_key_here
 
 # Metadaten-Services  
-SPOTIFY_CLIENT_ID=your_spotify_client_id
-SPOTIFY_CLIENT_SECRET=your_spotify_client_secret
 LASTFM_API_KEY=your_lastfm_key_here
 MUSICBRAINZ_USERAGENT=YourAppName/1.0 (your@email.com)
 
-# Cover und Release-Daten
+# Optional: Erweiterte Services
 DISCOGS_CONSUMER_KEY=your_discogs_key_here
 DISCOGS_CONSUMER_SECRET=your_discogs_secret_here
 
-# Betrieb
-MP3_SOURCE_DIR=~/tmp/mp3ren/mp3s
-DRY_RUN=True
-LOG_FILE=~/tmp/mp3ren/processing.log
+# Desktop-spezifische Einstellungen
+LOG_LEVEL=INFO
+CACHE_DIR=./cache
+BACKUP_ENABLED=True
 ```
 
 **API-Key Beschaffung:**
 - **AcoustID**: Registrierung auf https://acoustid.org/
-- **Spotify**: App registrieren auf https://developer.spotify.com/
 - **Last.fm**: API-Key auf https://www.last.fm/api
-- **Discogs**: Developer Account auf https://www.discogs.com/developers/
 - **MusicBrainz**: Keine Registrierung, nur User-Agent erforderlich
 - **Shazam**: Keine API-Keys nötig (verwendet ShazamIO Python-Library)
+- **Discogs**: Optional - Developer Account auf https://www.discogs.com/developers/
 
-### **Aktueller Implementierungsstand**
+### **Desktop-Implementierungsstand**
 
 **Kern-Features (✅ Vollständig implementiert):**
-- ✅ Verzeichnis scannen und MP3s anzeigen
-- ✅ ID3-Metadaten bearbeiten mit automatischer Checkbox-Aktivierung
-- ✅ Cover-Status anzeigen (intern/extern/beide/keine)
-- ✅ Robuste Speichern-Funktionalität mit Fehlerbehandlung
+- ✅ Desktop-GUI mit tkinter
+- ✅ Verzeichnis-Scanner mit File-Dialog
+- ✅ MP3-Tabelle mit Inline-Editing
+- ✅ Checkbox-System für Datei-Auswahl
+- ✅ Cover-Status-Anzeige (intern/extern/beide/keine)
+- ✅ Robuste Speicher-Funktionalität mit Threading
 - ✅ Intelligentes Dateiname-Parsing für Track-Nummern
-- ✅ Progress-Tracking für alle Operationen
+
+**Audio-Erkennung (✅ Vollständig implementiert):**
+- ✅ Shazam-Integration mit ShazamIO
+- ✅ AcoustID-Integration mit MusicBrainz
+- ✅ Asynchrone Verarbeitung ohne GUI-Blocking
+- ✅ Progress-Feedback über Status-Bar
+
+**Metadaten-Anreicherung (✅ Vollständig implementiert):**
+- ✅ Last.fm-Integration für erweiterte Metadaten
+- ✅ MusicBrainz-Abfrage für standardisierte Informationen
+- ✅ Batch-Verarbeitung für markierte Dateien
+- ✅ HTTP-Client mit Rate-Limiting
+
+**Cover-Management (✅ Vollständig implementiert):**
+- ✅ Cover-Erkennung und Analyse
+- ✅ Cover-Auswahl-Dialog mit Vorschau
+- ✅ Cover-Operationen (Laden, Entfernen, Anzeigen)
+- ✅ Unterstützung für interne und externe Cover
+
+**Album-Erkennung (✅ NEU implementiert):**
+- ✅ MusicBrainz und Discogs Integration
+- ✅ Intelligente Album-Kandidaten-Suche
+- ✅ Konfidenz-basierte Auswahl (>70% Übereinstimmung)
+- ✅ Automatische Album-Metadaten-Zuordnung
 
 **Erweiterte Features (✅ Vollständig implementiert):**
-- ✅ Audio-Erkennung (AcoustID/Shazam) mit Progress-Feedback
-- ✅ Album-Erkennung (MusicBrainz/Discogs) mit detailliertem Progress
-- ✅ Erweiterte Metadaten-Anreicherung (Spotify, Last.fm)
-- ✅ Hover-Details für MP3-Informationen
-- ✅ Batch-Operationen für markierte Dateien
-- ✅ HTTP-Client mit Rate-Limiting für alle API-Services
-
-**Code-Qualität (✅ Optimiert):**
-- ✅ Konsolidierte HTTP-Client-Utilities
-- ✅ Entfernung von orphaned Code und redundanten Dateien
-- ✅ Verbesserte Fehlerbehandlung und Logging
-- ✅ Modulare Architektur für bessere Wartbarkeit
+- ✅ Batch-Metadaten-Editor-Dialog
+- ✅ Automatische Track-Nummerierung für ausgewählte Dateien
+- ✅ Automatische Checkbox-Aktivierung bei Änderungen
+- ✅ Thread-sichere GUI-Updates
+- ✅ Umfassende Fehlerbehandlung und Logging
 
 ## 🚫 Bewusst einfach gehalten
 
-- Keine komplexen Cover-Management-Dialoge
-- Keine Playlist-Funktionen im Audio-Player
+- Keine komplexen Playlist-Funktionen oder Audio-Player
 - Keine automatische Datei-Organisation/Umbenennung
-- Keine Benutzer-Accounts oder Sessions
 - Keine persistente Datenbank (Filesystem-basiert)
+- Keine Netzwerk-Features oder Multi-User-Support
+- Fokus auf MP3-Metadaten-Bearbeitung als Kern-Funktionalität
 
 ---
 
 ## 🎯 Projektphilosophie
 
-Das System wurde bewusst als **schlanke, fokussierte MP3-Tagging-Lösung** entwickelt mit Priorität auf:
+Das System wurde als **native Desktop-MP3-Tagging-Lösung** entwickelt mit Priorität auf:
 
-1. **Einfachheit** - Intuitive Bedienung ohne steile Lernkurve
-2. **Stabilität** - Robuste Kern-Funktionen mit umfassendem Error-Handling  
-3. **Wartbarkeit** - Saubere, modulare Architektur für einfache Erweiterung
-4. **Performance** - Effiziente Batch-Operationen mit Progress-Feedback
+1. **Native Desktop-Experience** - tkinter für plattformspezifisches Look-and-Feel
+2. **Performance** - Asynchrone Verarbeitung und Thread-sichere GUI-Updates  
+3. **Stabilität** - Robuste Kern-Funktionen mit umfassendem Error-Handling
+4. **Wartbarkeit** - Saubere, modulare Architektur für einfache Erweiterung
 
 ---
 
@@ -296,39 +374,33 @@ Das System wurde bewusst als **schlanke, fokussierte MP3-Tagging-Lösung** entwi
 ```
 mp3-tagger-web/
 │
-├── app.py                       # Flask-Hauptanwendung mit API-Endpoints
+├── mp3_tagger_gui.py            # Haupt-Desktop-GUI-Anwendung
+├── start_desktop.py             # Startskript mit Dependency-Checks
 ├── requirements.txt             # Python-Abhängigkeiten
 ├── config.env                   # Konfiguration & API-Keys
 ├── directory_history.json       # Verzeichnis-Verlauf (auto-generiert)
 │
-├── static/                      # Frontend-Assets
-│   ├── styles.css              # Moderne CSS mit Responsive Design
-│   ├── utils.js                # JavaScript-Utilities
-│   ├── drag-drop-icon.svg      # UI-Icons
-│   └── fallback-icon.png       # Fallback-Grafiken
-│
-├── templates/                   # Jinja2-Templates
-│   ├── index.html              # Startseite mit Verzeichnisauswahl
-│   └── results.html            # Hauptansicht mit MP3-Tabelle
-│
 ├── tagger/                      # Backend-Kern-Module
 │   ├── __init__.py             # Package-Initialisierung
-│   ├── mp3_processor.py        # MP3-Verarbeitung & Metadaten-Extraktion
-│   ├── utils.py                # Grundlegende MP3-Tag-Operationen
+│   ├── desktop_mp3_processor.py # Desktop-spezifische MP3-Verarbeitung
+│   ├── mp3_processor.py        # Kern-MP3-Verarbeitung & Metadaten
+│   ├── cover_manager.py        # Cover-Erkennung und -Management
 │   ├── audio_recognition.py    # Audio-Fingerprinting (AcoustID/Shazam)
-│   ├── album_recognition.py    # Album-Erkennung mit Progress-Tracking
-│   ├── extended_metadata.py    # Metadaten-Anreicherung (Spotify/Last.fm)
+│   ├── extended_metadata.py    # Metadaten-Anreicherung (Last.fm/MusicBrainz)
+│   ├── metadata_editor.py      # Batch-Metadaten-Editor-Dialoge
+│   ├── desktop_config.py       # Desktop-spezifische Konfiguration
+│   ├── utils.py                # Grundlegende MP3-Tag-Operationen
 │   ├── http_client.py          # HTTP-Client mit Rate-Limiting
 │   └── directory_history.py    # Verzeichnis-Verlauf Management
 │
 └── test_music/                  # Test-MP3-Dateien (für Development)
 ```
 
-**Architektur-Vorteile:**
-- **Modulare Trennung**: Klare Separation zwischen Web-UI, Business-Logic und API-Services
-- **Skalierbar**: Neue Features können als separate Module hinzugefügt werden  
-- **Testbar**: Isolierte Module ermöglichen einfaches Unit-Testing
-- **Deployment-ready**: Alle Abhängigkeiten klar definiert und containerisierbar
+**Desktop-Architektur-Vorteile:**
+- **Native GUI**: Plattformspezifisches Look-and-Feel mit tkinter
+- **Thread-sicher**: Asynchrone Verarbeitung ohne GUI-Blocking  
+- **Modulare Struktur**: Klare Trennung zwischen GUI und Business-Logic
+- **Deployment-ready**: Alle Abhängigkeiten klar definiert, keine Web-Server nötig
 
 
 

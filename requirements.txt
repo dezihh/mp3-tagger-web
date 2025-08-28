@@ -8,3 +8,4 @@ musicbrainzngs
 discogs-client
 aiohttp
 spotipy
+pygame

@@ -15,9 +15,11 @@ import json
 from tagger.desktop_mp3_processor import DesktopMP3Processor
 from tagger.cover_manager import CoverManager
 from tagger.audio_recognition import AudioRecognitionService
+from tagger.album_recognition import create_album_recognition_service
 from tagger.extended_metadata import ExtendedMetadataService
 from tagger.desktop_config import desktop_config
 from tagger.metadata_editor import MetadataEditorDialog, BatchMetadataEditorDialog
+from tagger.audio_player_widget import AudioPlayerWidget
 
 
 class MP3TaggerGUI:
@@ -35,10 +37,30 @@ class MP3TaggerGUI:
         self.mp3_processor = DesktopMP3Processor()
         self.cover_manager = None  # Wird erst bei Verzeichnis-Auswahl initialisiert
         self.audio_recognition = None  # Wird bei Bedarf mit API-Key initialisiert
+        self.album_recognition = None  # Wird bei Bedarf mit API-Keys initialisiert
         self.extended_metadata = None  # Wird bei Bedarf mit API-Keys initialisiert
+        self.audio_player_widget = None  # Audio-Player Widget
         
         self.setup_ui()
         self.setup_styles()
+        self.setup_keyboard_shortcuts()
+        
+    def setup_keyboard_shortcuts(self):
+        """Konfiguriert Keyboard-Shortcuts"""
+        # Ctrl+A für "Alle auswählen"
+        self.root.bind('<Control-a>', lambda e: self.select_all_files())
+        # Ctrl+D für "Alle abwählen"  
+        self.root.bind('<Control-d>', lambda e: self.deselect_all_files())
+        # Ctrl+S für "Speichern"
+        self.root.bind('<Control-s>', lambda e: self.save_selected_files())
+        # F5 für "Verzeichnis neu scannen"
+        self.root.bind('<F5>', lambda e: self.scan_directory())
+        # Ctrl+O für "Verzeichnis öffnen"
+        self.root.bind('<Control-o>', lambda e: self.browse_directory())
+        # Leertaste für "Vorhören"
+        self.root.bind('<space>', lambda e: self.play_selected_file())
+        # Enter für "Play/Pause"
+        self.root.bind('<Return>', lambda e: self.toggle_audio_playback())
         
     def setup_styles(self):
         """Konfiguriert das Aussehen der Anwendung"""
@@ -58,7 +80,7 @@ class MP3TaggerGUI:
         main_container = ttk.Frame(self.root, padding="10")
         main_container.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
         main_container.columnconfigure(0, weight=1)
-        main_container.rowconfigure(2, weight=1)
+        main_container.rowconfigure(3, weight=1)  # Angepasst für Audio-Player
         
         # Header
         self.create_header(main_container)
@@ -66,11 +88,14 @@ class MP3TaggerGUI:
         # Verzeichnis-Auswahl
         self.create_directory_selector(main_container)
         
+        # Audio-Player
+        self.create_audio_player(main_container)
+        
         # Haupt-Inhalt
         self.create_main_content(main_container)
         
         # Status Bar
-        self.create_status_bar(main_container)
+        self.create_status_bar(main_container, row=4)  # Angepasst für Audio-Player
         
     def create_header(self, parent):
         """Erstellt den Header"""
@@ -89,10 +114,14 @@ class MP3TaggerGUI:
         ttk.Entry(dir_frame, textvariable=self.current_directory, state='readonly').grid(row=0, column=1, sticky=(tk.W, tk.E))
         ttk.Button(dir_frame, text="Verzeichnis scannen", command=self.scan_directory).grid(row=0, column=2, padx=(10, 0))
         
+    def create_audio_player(self, parent):
+        """Erstellt das Audio-Player Widget"""
+        self.audio_player_widget = AudioPlayerWidget(parent)
+        
     def create_main_content(self, parent):
         """Erstellt den Hauptinhalt mit integrierter Funktionalität"""
         content_frame = ttk.Frame(parent)
-        content_frame.grid(row=2, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        content_frame.grid(row=3, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))  # Angepasst für Audio-Player
         content_frame.columnconfigure(0, weight=1)
         content_frame.rowconfigure(2, weight=1)
         
@@ -133,6 +162,16 @@ class MP3TaggerGUI:
         ttk.Button(cover_buttons, text="Cover laden", command=self.load_covers, width=12).pack(side=tk.LEFT, padx=(0, 5))
         ttk.Button(cover_buttons, text="Cover entfernen", command=self.remove_covers, width=12).pack(side=tk.LEFT)
         
+        # Album Recognition Bereich
+        album_frame = ttk.Frame(function_frame)
+        album_frame.pack(side=tk.LEFT, padx=(0, 20))
+        
+        ttk.Label(album_frame, text="Album-Erkennung:", font=('Arial', 9, 'bold')).pack(anchor=tk.W)
+        album_buttons = ttk.Frame(album_frame)
+        album_buttons.pack(fill=tk.X, pady=(2, 0))
+        
+        ttk.Button(album_buttons, text="Album erkennen", command=self.recognize_album, width=12).pack(side=tk.LEFT)
+        
         # Metadata Enrichment Bereich
         metadata_frame = ttk.Frame(function_frame)
         metadata_frame.pack(side=tk.LEFT, padx=(0, 20))
@@ -153,14 +192,16 @@ class MP3TaggerGUI:
         batch_buttons.pack(fill=tk.X, pady=(2, 0))
         
         ttk.Button(batch_buttons, text="Bearbeiten", command=self.edit_selected_metadata, width=10).pack(side=tk.LEFT, padx=(0, 5))
-        ttk.Button(batch_buttons, text="Speichern", command=self.save_selected_files, width=10).pack(side=tk.LEFT)
+        ttk.Button(batch_buttons, text="Speichern", command=self.save_selected_files, width=10).pack(side=tk.LEFT, padx=(0, 5))
+        ttk.Button(batch_buttons, text="Track-Nr.", command=self.auto_number_tracks, width=10).pack(side=tk.LEFT)
 
     def create_files_toolbar(self, parent):
         """Erstellt die Dateien-Toolbar mit Auswahl-Buttons"""
         toolbar = ttk.Frame(parent)
         toolbar.grid(row=1, column=0, sticky=(tk.W, tk.E), pady=(0, 10))
         
-        ttk.Button(toolbar, text="Alle auswählen", command=self.select_all_files).pack(side=tk.LEFT, padx=(0, 5))
+        ttk.Button(toolbar, text="Alles markieren", command=self.select_all_files).pack(side=tk.LEFT, padx=(0, 5))
+        ttk.Button(toolbar, text="Verzeichnis markieren", command=self.select_current_directory).pack(side=tk.LEFT, padx=(0, 5))
         ttk.Button(toolbar, text="Auswahl aufheben", command=self.deselect_all_files).pack(side=tk.LEFT, padx=(0, 5))
         
         # Status-Info
@@ -175,12 +216,12 @@ class MP3TaggerGUI:
         table_frame.columnconfigure(0, weight=1)
         table_frame.rowconfigure(0, weight=1)
         
-        # Treeview für Dateien (erweitert um zusätzliche Spalten)
-        columns = ('select', 'filename', 'title', 'artist', 'album', 'year', 'track', 'genre', 'cover', 'status')
-        self.files_tree = ttk.Treeview(table_frame, columns=columns, show='headings', height=20)
+        # Treeview für Dateien (ohne Checkbox-Spalte, mit Verzeichnis-Struktur)
+        columns = ('filename', 'title', 'artist', 'album', 'year', 'track', 'genre', 'cover', 'status')
+        self.files_tree = ttk.Treeview(table_frame, columns=columns, show='tree headings', height=20)
         
         # Spalten konfigurieren
-        self.files_tree.heading('select', text='☐')
+        self.files_tree.heading('#0', text='Verzeichnis/Datei')  # Tree-Spalte für Verzeichnisse
         self.files_tree.heading('filename', text='Dateiname')
         self.files_tree.heading('title', text='Titel')
         self.files_tree.heading('artist', text='Künstler')
@@ -192,16 +233,16 @@ class MP3TaggerGUI:
         self.files_tree.heading('status', text='Status')
         
         # Spaltenbreiten
-        self.files_tree.column('select', width=30)
-        self.files_tree.column('filename', width=200)
-        self.files_tree.column('title', width=150)
-        self.files_tree.column('artist', width=120)
-        self.files_tree.column('album', width=120)
-        self.files_tree.column('year', width=60)
-        self.files_tree.column('track', width=50)
-        self.files_tree.column('genre', width=100)
-        self.files_tree.column('cover', width=80)
-        self.files_tree.column('status', width=120)
+        self.files_tree.column('#0', width=250, minwidth=200)  # Tree-Spalte für Verzeichnis/Datei
+        self.files_tree.column('filename', width=0, minwidth=0)  # Versteckt, da in Tree-Spalte
+        self.files_tree.column('title', width=150, minwidth=100)
+        self.files_tree.column('artist', width=120, minwidth=100)
+        self.files_tree.column('album', width=120, minwidth=100)
+        self.files_tree.column('year', width=60, minwidth=50)
+        self.files_tree.column('track', width=50, minwidth=40)
+        self.files_tree.column('genre', width=100, minwidth=80)
+        self.files_tree.column('cover', width=80, minwidth=60)
+        self.files_tree.column('status', width=120, minwidth=80)
         
         # Scrollbars
         v_scrollbar = ttk.Scrollbar(table_frame, orient=tk.VERTICAL, command=self.files_tree.yview)
@@ -213,17 +254,230 @@ class MP3TaggerGUI:
         v_scrollbar.grid(row=0, column=1, sticky=(tk.N, tk.S))
         h_scrollbar.grid(row=1, column=0, sticky=(tk.W, tk.E))
         
-        # Events
-        self.files_tree.bind('<Button-1>', self.toggle_file_selection)
+        # Events - Zeilen-basierte Markierung statt Checkbox
+        self.files_tree.bind('<Button-1>', self.toggle_row_selection)
         self.files_tree.bind('<Double-1>', self.edit_file_metadata)
+        self.files_tree.bind('<Button-3>', self.show_context_menu)  # Rechtsklick für Kontextmenü
+        
+        # Kontextmenü erstellen
+        self.create_context_menu()
+        
+        # Tracking für markierte Zeilen
+        self.selected_items = set()  # Set der markierten Item-IDs
+        
+        # Zuordnung von Tree-Item-IDs zu Dateipfaden
+        self.item_to_path = {}  # Mapping für Pfad-Ermittlung
 
-    def create_status_bar(self, parent):
+    def create_status_bar(self, parent, row=3):
         """Erstellt die Status Bar"""
         self.status_var = tk.StringVar()
         self.status_var.set("Bereit")
         
         status_bar = ttk.Label(parent, textvariable=self.status_var, relief=tk.SUNKEN, anchor=tk.W)
-        status_bar.grid(row=3, column=0, sticky=(tk.W, tk.E))
+        status_bar.grid(row=row, column=0, sticky=(tk.W, tk.E))
+        
+    def create_context_menu(self):
+        """Erstellt das Kontextmenü für die Datei-Tabelle"""
+        self.context_menu = tk.Menu(self.root, tearoff=0)
+        self.context_menu.add_command(label="🎵 Vorhören", command=self.play_selected_file)
+        self.context_menu.add_separator()
+        self.context_menu.add_command(label="✏️ Metadaten bearbeiten", command=self.edit_file_metadata_from_context)
+        self.context_menu.add_command(label="🖼️ Cover auswählen", command=self.select_cover_for_file)
+        self.context_menu.add_separator()
+        self.context_menu.add_command(label="✅ Markieren", command=self.mark_selected_file)
+        self.context_menu.add_command(label="❌ Markierung entfernen", command=self.unmark_selected_file)
+
+    def show_context_menu(self, event):
+        """Zeigt das Kontextmenü"""
+        # Item unter Mauszeiger ermitteln
+        item = self.files_tree.identify_row(event.y)
+        if item:
+            # Item auswählen
+            self.files_tree.selection_set(item)
+            
+            # Prüfe ob es eine Datei ist (nicht Verzeichnis)
+            item_tags = self.files_tree.item(item, 'tags')
+            if 'file' in item_tags or 'selected' in item_tags:
+                # Kontextmenü anzeigen
+                try:
+                    self.context_menu.tk_popup(event.x_root, event.y_root)
+                finally:
+                    self.context_menu.grab_release()
+
+    def play_selected_file(self):
+        """Spielt die ausgewählte Datei ab"""
+        selection = self.files_tree.selection()
+        if not selection:
+            messagebox.showinfo("Info", "Bitte wählen Sie eine MP3-Datei aus.")
+            return
+        
+        selected_item = selection[0]
+        full_path = self.get_file_path_from_tree_item(selected_item)
+        
+        if full_path:
+            # Audio-Player verwenden
+            if self.audio_player_widget:
+                if self.audio_player_widget.load_file(full_path):
+                    filename = os.path.basename(full_path)
+                    self.status_var.set(f"🎵 Spielt ab: {filename}")
+                    print(f"🎵 Datei für Vorhören geladen: {filename}")
+                    
+                    # Automatisch starten
+                    self.audio_player_widget.toggle_play()
+                else:
+                    self.status_var.set("❌ Fehler beim Laden der Datei")
+                    messagebox.showerror("Fehler", f"Datei konnte nicht geladen werden:\n{os.path.basename(full_path)}")
+            else:
+                messagebox.showerror("Fehler", "Audio-Player nicht verfügbar")
+        else:
+            messagebox.showerror("Fehler", "Datei nicht gefunden oder ungültiges Format")
+
+    def mark_selected_file(self):
+        """Markiert die ausgewählte Datei"""
+        selection = self.files_tree.selection()
+        if selection:
+            item = selection[0]
+            item_tags = self.files_tree.item(item, 'tags')
+            if 'file' in item_tags or 'selected' in item_tags:
+                self.selected_items.add(item)
+                self.files_tree.item(item, tags=['selected'])
+                self.update_selection_status()
+
+    def unmark_selected_file(self):
+        """Entfernt Markierung der ausgewählten Datei"""
+        selection = self.files_tree.selection()
+        if selection:
+            item = selection[0]
+            if item in self.selected_items:
+                self.selected_items.remove(item)
+                self.files_tree.item(item, tags=['file'])
+                self.update_selection_status()
+
+    def get_file_path_from_tree_item(self, item):
+        """Ermittelt den vollständigen Dateipfad aus einem Tree-Item"""
+        try:
+            # Prüfe ob es eine Datei ist
+            item_tags = self.files_tree.item(item, 'tags')
+            if 'file' not in item_tags and 'selected' not in item_tags:
+                return None
+            
+            # Verwende das Mapping, falls verfügbar
+            if item in self.item_to_path:
+                full_path = self.item_to_path[item]
+                print(f"🔍 Pfad aus Mapping: {full_path}")
+                return full_path if os.path.exists(full_path) else None
+            
+            # Fallback: Versuch über Tree-Struktur (für Kompatibilität)
+            parent_item = self.files_tree.parent(item)
+            if not parent_item:
+                return None
+            
+            # Extrahiere echten Verzeichnisnamen aus formatiertem Text
+            directory_text = self.files_tree.item(parent_item, 'text')
+            # Entferne Format: "📁 NAME (X Dateien)" -> "NAME"
+            if directory_text.startswith('📁 ') and ' (' in directory_text:
+                directory_name = directory_text[2:].split(' (')[0]
+            else:
+                directory_name = directory_text
+            
+            filename = self.files_tree.item(item, 'text')
+            
+            print(f"🔍 Tree Fallback:")
+            print(f"  - Directory name: {directory_name}")
+            print(f"  - Filename: {filename}")
+            
+            # Versuche Pfad aus current_directory zu konstruieren
+            if hasattr(self, 'current_directory') and self.current_directory.get():
+                base_dir = self.current_directory.get()
+                # Prüfe verschiedene Pfad-Kombinationen
+                possible_paths = [
+                    os.path.join(base_dir, directory_name, filename),
+                    os.path.join(base_dir, filename),
+                    os.path.join(directory_name, filename)
+                ]
+                
+                for path in possible_paths:
+                    if os.path.exists(path):
+                        print(f"🔍 Gefunden: {path}")
+                        return path
+            
+            return None
+            
+        except Exception as e:
+            print(f"🚨 Fehler bei Pfad-Ermittlung: {e}")
+            return None
+
+    def toggle_audio_playback(self):
+        """Wechselt zwischen Play und Pause für den Audio-Player"""
+        if self.audio_player_widget:
+            self.audio_player_widget.toggle_play()
+
+    def select_cover_for_file(self):
+        """Wählt Cover für die ausgewählte Datei"""
+        selection = self.files_tree.selection()
+        if not selection:
+            messagebox.showinfo("Info", "Bitte wählen Sie eine MP3-Datei aus.")
+            return
+        
+        selected_item = selection[0]
+        full_path = self.get_file_path_from_tree_item(selected_item)
+        
+        if full_path and self.cover_manager:
+            try:
+                filename = os.path.basename(full_path)
+                # Cover-Dialog öffnen
+                dialog = CoverSelectionDialog(self.root, full_path, filename, self.cover_manager)
+                print(f"🖼️ Cover-Dialog für {filename} geöffnet")
+            except Exception as e:
+                print(f"🚨 Cover-Dialog Fehler: {e}")
+                messagebox.showerror("Fehler", f"Cover-Dialog konnte nicht geöffnet werden:\n{str(e)}")
+        else:
+            if not full_path:
+                messagebox.showerror("Fehler", "Datei nicht gefunden oder ungültiges Format")
+            else:
+                messagebox.showerror("Fehler", "Cover-Manager nicht verfügbar")
+
+    def edit_file_metadata_from_context(self):
+        """Öffnet den Metadaten-Editor für die ausgewählte Datei (Kontextmenü)"""
+        selection = self.files_tree.selection()
+        if not selection:
+            messagebox.showinfo("Info", "Bitte wählen Sie eine MP3-Datei aus.")
+            return
+        
+        selected_item = selection[0]
+        full_path = self.get_file_path_from_tree_item(selected_item)
+        
+        if full_path:
+            # Erstelle file_info Dictionary für den Editor
+            try:
+                from mutagen.mp3 import MP3
+                mp3_file = MP3(full_path)
+                
+                # Erstelle Dictionary mit den erwarteten Feldern
+                file_info = {
+                    'filepath': full_path,
+                    'filename': os.path.basename(full_path),
+                    'title': mp3_file.get('TIT2', [''])[0] if mp3_file.get('TIT2') else '',
+                    'artist': mp3_file.get('TPE1', [''])[0] if mp3_file.get('TPE1') else '',
+                    'album': mp3_file.get('TALB', [''])[0] if mp3_file.get('TALB') else '',
+                    'track': mp3_file.get('TRCK', [''])[0] if mp3_file.get('TRCK') else '',
+                    'year': mp3_file.get('TDRC', [''])[0] if mp3_file.get('TDRC') else '',
+                    'genre': mp3_file.get('TCON', [''])[0] if mp3_file.get('TCON') else ''
+                }
+                
+                # Finde item_id für Tabellen-Updates
+                for item_id, path in self.item_to_path.items():
+                    if path == full_path:
+                        file_info['item_id'] = item_id
+                        break
+                
+                self.edit_single_file_metadata(file_info)
+                
+            except Exception as e:
+                print(f"🚨 Metadaten-Editor Fehler: {e}")
+                messagebox.showerror("Fehler", f"Metadaten konnten nicht geladen werden:\n{str(e)}")
+        else:
+            messagebox.showerror("Fehler", "Datei nicht gefunden oder ungültiges Format")
 
     # === Verzeichnis- und Datei-Management ===
     
@@ -258,22 +512,21 @@ class MP3TaggerGUI:
             self.root.after(0, lambda: self.status_var.set("Fehler beim Scannen"))
             
     def _update_files_display(self, files_data):
-        """Aktualisiert die Dateien-Anzeige"""
+        """Aktualisiert die Dateien-Anzeige mit Verzeichnis-Gruppierung"""
         # Treeview leeren
         for item in self.files_tree.get_children():
             self.files_tree.delete(item)
             
         self.mp3_files = files_data.get('files', [])
+        self.selected_items = set()  # Reset der Auswahl
+        self.item_to_path = {}  # Reset des Mappings
         
         # Cover Manager für das Verzeichnis initialisieren
-        # Wenn MP3-Dateien vorhanden sind, nutze das Verzeichnis der ersten Datei
-        # Ansonsten nutze das Hauptverzeichnis
         cover_directory = files_data.get('directory')
         if self.mp3_files and self.mp3_files[0].get('filepath'):
             first_file_path = self.mp3_files[0]['filepath']
             first_file_directory = os.path.dirname(first_file_path)
             
-            # Prüfe ob es tatsächlich ein anderes Verzeichnis ist
             if first_file_directory != cover_directory:
                 cover_directory = first_file_directory
                 print(f"📁 CoverManager wird für MP3-Verzeichnis initialisiert: {cover_directory}")
@@ -283,27 +536,98 @@ class MP3TaggerGUI:
         if cover_directory:
             self.cover_manager = CoverManager(cover_directory)
         
-        # Dateien in Treeview einfügen (erweiterte Spalten)
+        # Dateien nach Verzeichnissen gruppieren
+        directories = {}
         for file_data in self.mp3_files:
-            self.files_tree.insert('', 'end', values=(
-                '☐',  # Checkbox
-                file_data.get('filename', ''),
-                file_data.get('title', ''),
-                file_data.get('artist', ''),
-                file_data.get('album', ''),
-                file_data.get('year', ''),
-                file_data.get('track', ''),
-                file_data.get('genre', ''),
-                file_data.get('cover_status', 'Nein'),
-                'Bereit'  # Status-Spalte
-            ))
+            file_path = file_data.get('filepath', '')
+            if file_path:
+                file_dir = os.path.dirname(file_path)
+                dir_name = os.path.basename(file_dir) if file_dir else 'Root'
+                
+                if dir_name not in directories:
+                    directories[dir_name] = []
+                directories[dir_name].append(file_data)
+        
+        # Verzeichnisse und Dateien in Treeview einfügen
+        for dir_name, files in sorted(directories.items()):
+            # Verzeichnis-Knoten erstellen
+            dir_item = self.files_tree.insert('', 'end', 
+                text=f"📁 {dir_name} ({len(files)} Dateien)",
+                values=('', '', '', '', '', '', '', '', ''),
+                tags=('directory',))
+            
+            # Dateien unter Verzeichnis-Knoten einfügen
+            for file_data in sorted(files, key=lambda f: f.get('filename', '')):
+                item_id = self.files_tree.insert(dir_item, 'end',
+                    text=file_data.get('filename', ''),
+                    values=(
+                        '',  # Versteckte filename-Spalte (steht jetzt in text)
+                        file_data.get('title', ''),
+                        file_data.get('artist', ''),
+                        file_data.get('album', ''),
+                        file_data.get('year', ''),
+                        file_data.get('track', ''),
+                        file_data.get('genre', ''),
+                        file_data.get('cover_status', 'Nein'),
+                        ''  # Status
+                    ),
+                    tags=('file',))
+                
+                # Item-ID in file_data speichern für spätere Referenz
+                file_data['item_id'] = item_id
+                
+                # Zuordnung für Pfad-Ermittlung speichern
+                self.item_to_path[item_id] = file_data.get('filepath', '')
+            
+            # Verzeichnis-Knoten standardmäßig ausgeklappt
+            self.files_tree.item(dir_item, open=True)
             
         self.status_var.set(f"Gefunden: {len(self.mp3_files)} MP3-Dateien")
         self.update_selection_status()
+        
+        # Tags für visuelle Unterscheidung konfigurieren - mit hohem Kontrast
+        self.files_tree.tag_configure('directory', background='#f0f0f0', font=('Arial', 9, 'bold'), foreground='black')
+        self.files_tree.tag_configure('file', background='white', foreground='black', font=('Arial', 9))
+        
+        # Sehr kontrastreiches Schema für ausgewählte Elemente
+        self.files_tree.tag_configure('selected', background='#ff0000', foreground='#ffffff', font=('Arial', 9, 'bold'))  # Rot/Weiß für maximale Sichtbarkeit
+        
+        # Alternative Fallback-Konfiguration für problematische tkinter-Versionen
+        try:
+            self.files_tree.tag_configure('selected_highlight', background='#00ff00', foreground='#000000', font=('Arial', 9, 'bold'))  # Grün/Schwarz Fallback
+            print("🎨 Tags konfiguriert - ROT für ausgewählte Dateien")
+        except Exception as e:
+            print(f"🚨 Tag-Fallback-Fehler: {e}")
 
     # === Datei-Auswahl und -Management ===
     
-    def toggle_file_selection(self, event):
+    def toggle_row_selection(self, event):
+        """Zeilen-basierte Markierung statt Checkbox-Klick"""
+        # Item unter Mauszeiger ermitteln
+        item = self.files_tree.identify('item', event.x, event.y)
+        if not item:
+            return
+            
+        # Nur Dateien markierbar, nicht Verzeichnis-Knoten
+        item_tags = self.files_tree.item(item, 'tags')
+        if 'file' not in item_tags and 'selected' not in item_tags:
+            return
+            
+        # Markierung umschalten
+        if item in self.selected_items:
+            # Abwählen
+            self.selected_items.remove(item)
+            # Zurück zu 'file' Tag
+            self.files_tree.item(item, tags=['file'])
+            print(f"🔘 Datei abgewählt: {self.files_tree.item(item, 'text')}")
+        else:
+            # Auswählen
+            self.selected_items.add(item)
+            # Zu 'selected' Tag wechseln
+            self.files_tree.item(item, tags=['selected'])
+            print(f"🔵 Datei gewählt: {self.files_tree.item(item, 'text')}")
+        
+        self.update_selection_status()
         """Schaltet die Auswahl einer Datei um"""
         # Ermittle welche Zeile geklickt wurde
         item = self.files_tree.identify_row(event.y)
@@ -325,72 +649,163 @@ class MP3TaggerGUI:
                 values[0] = '☐'
                 if item in self.selected_files:
                     self.selected_files.remove(item)
-            
-            self.files_tree.item(item, values=values)
-            self.update_selection_status()
-            
     def select_all_files(self):
         """Wählt alle Dateien aus"""
-        self.selected_files.clear()
-        for item in self.files_tree.get_children():
-            values = list(self.files_tree.item(item, 'values'))
-            values[0] = '☑'
-            self.files_tree.item(item, values=values)
-            self.selected_files.append(item)
+        self.selected_items.clear()
+        
+        # Alle Datei-Items in allen Verzeichnissen finden und markieren
+        for dir_item in self.files_tree.get_children():
+            for file_item in self.files_tree.get_children(dir_item):
+                item_tags = self.files_tree.item(file_item, 'tags')
+                if 'file' in item_tags or 'selected' in item_tags:
+                    self.selected_items.add(file_item)
+                    # Nur 'selected' Tag setzen
+                    self.files_tree.item(file_item, tags=['selected'])
+                    # Debug: Bestätige dass Tag gesetzt wurde
+                    new_tags = self.files_tree.item(file_item, 'tags')
+                    print(f"🔵 Datei markiert - Tags: {new_tags}")
+        
         self.update_selection_status()
+        print(f"🔵 Alle Dateien markiert: {len(self.selected_items)} Dateien")
+        
+        # Debug: Teste Tag-Konfiguration
+        self.debug_tag_configuration()
+        
+    def select_current_directory(self):
+        """Markiert alle Dateien im aktuell ausgewählten Verzeichnis"""
+        # Aktuell ausgewähltes Item ermitteln
+        selection = self.files_tree.selection()
+        if not selection:
+            messagebox.showinfo("Info", "Bitte wählen Sie zuerst ein Verzeichnis oder eine Datei aus.")
+            return
+            
+        selected_item = selection[0]
+        
+        # Ermittle Verzeichnis-Knoten
+        item_tags = self.files_tree.item(selected_item, 'tags')
+        if 'directory' in item_tags:
+            # Direkt ein Verzeichnis ausgewählt
+            dir_item = selected_item
+        elif 'file' in item_tags or 'selected' in item_tags:
+            # Eine Datei ausgewählt - parent ist das Verzeichnis
+            dir_item = self.files_tree.parent(selected_item)
+        else:
+            return
+            
+        # Alle Dateien in diesem Verzeichnis markieren
+        files_marked = 0
+        for file_item in self.files_tree.get_children(dir_item):
+            item_tags = self.files_tree.item(file_item, 'tags')
+            if 'file' in item_tags or 'selected' in item_tags:
+                self.selected_items.add(file_item)
+                # Nur 'selected' Tag setzen
+                self.files_tree.item(file_item, tags=['selected'])
+                files_marked += 1
+        
+        dir_name = self.files_tree.item(dir_item, 'text')
+        messagebox.showinfo("Verzeichnis markiert", f"{files_marked} Dateien in '{dir_name}' markiert.")
+        self.update_selection_status()
+        print(f"🔵 Verzeichnis markiert: {files_marked} Dateien")
         
     def deselect_all_files(self):
         """Hebt alle Auswahlen auf"""
-        self.selected_files.clear()
-        for item in self.files_tree.get_children():
-            values = list(self.files_tree.item(item, 'values'))
-            values[0] = '☐'
-            self.files_tree.item(item, values=values)
+        for item in self.selected_items.copy():
+            # Tags zurücksetzen - zu 'file' Tag zurück
+            self.files_tree.item(item, tags=['file'])
+        
+        self.selected_items.clear()
         self.update_selection_status()
+        print(f"🔘 Alle Markierungen entfernt")
 
     def get_selected_files(self):
         """Gibt eine Liste der ausgewählten Dateien zurück"""
         selected_files = []
-        for item in self.files_tree.get_children():
-            values = self.files_tree.item(item, 'values')
-            if values[0] == '☑':  # Checkbox ist ausgewählt
-                file_index = self.files_tree.index(item)
-                if file_index < len(self.mp3_files):
-                    selected_files.append(self.mp3_files[file_index])
+        
+        for item_id in self.selected_items:
+            # Finde entsprechende file_data über item_id
+            for file_data in self.mp3_files:
+                if file_data.get('item_id') == item_id:
+                    selected_files.append(file_data)
+                    break
+        
         return selected_files
 
+    def debug_tag_configuration(self):
+        """Debug-Funktion zur Überprüfung der Tag-Konfiguration"""
+        try:
+            print("🔍 Tag-Konfiguration Debug:")
+            
+            # ttk.Treeview hat keine tag_cget Methode, verwende tag_has
+            configured_tags = ['directory', 'file', 'selected', 'selected_highlight']
+            for tag in configured_tags:
+                try:
+                    # Prüfe ob Tag existiert
+                    exists = hasattr(self.files_tree, 'tag_has')
+                    print(f"Tag '{tag}' verfügbar: {exists}")
+                    
+                    # Prüfe Konfiguration durch Anwendung auf Test-Item
+                    if self.files_tree.get_children():
+                        first_dir = self.files_tree.get_children()[0]
+                        if self.files_tree.get_children(first_dir):
+                            test_file = self.files_tree.get_children(first_dir)[0]
+                            
+                            # Wende Tag temporär an und prüfe
+                            old_tags = self.files_tree.item(test_file, 'tags')
+                            self.files_tree.item(test_file, tags=[tag])
+                            new_tags = self.files_tree.item(test_file, 'tags')
+                            print(f"Tag '{tag}' Test - Vorher: {old_tags}, Nachher: {new_tags}")
+                            
+                            # Stelle ursprüngliche Tags wieder her
+                            self.files_tree.item(test_file, tags=old_tags)
+                            
+                except Exception as e:
+                    print(f"Tag '{tag}' Debug-Fehler: {e}")
+                    
+        except Exception as e:
+            print(f"Debug-Fehler: {e}")
+
     def update_selection_status(self):
-        """Aktualisiert die Auswahl-Statusanzeige"""
-        selected = self.get_selected_files()
-        if selected:
-            self.selection_status.set(f"{len(selected)} Dateien ausgewählt")
-        else:
+        """Aktualisiert den Auswahlstatus"""
+        count = len(self.selected_items)
+        total = len(self.mp3_files)
+        
+        if count == 0:
             self.selection_status.set("Keine Dateien ausgewählt")
+        elif count == 1:
+            self.selection_status.set("1 Datei ausgewählt")
+        else:
+            self.selection_status.set(f"{count} von {total} Dateien ausgewählt")
 
     def _update_file_in_table(self, file_data):
         """Aktualisiert eine Datei in der Tabelle"""
         try:
-            # Finde den entsprechenden Eintrag in der Tabelle
-            filename = file_data.get('filename', '')
+            # Verwende item_id für direkte Aktualisierung
+            item_id = file_data.get('item_id')
+            if not item_id:
+                return
+                
+            # Aktualisiere die Werte direkt über item_id
+            self.files_tree.item(item_id, values=(
+                '',  # Versteckte filename-Spalte
+                file_data.get('title', ''),
+                file_data.get('artist', ''),
+                file_data.get('album', ''),
+                file_data.get('year', ''),
+                file_data.get('track', ''),
+                file_data.get('genre', ''),
+                file_data.get('cover_status', 'Nein'),
+                'Aktualisiert'  # Status
+            ))
             
-            for item in self.files_tree.get_children():
-                values = list(self.files_tree.item(item, 'values'))
-                if values[1] == filename:  # Vergleiche Dateiname (Spalte 1)
-                    # Aktualisiere die Werte
-                    values[2] = file_data.get('title', '')      # Titel
-                    values[3] = file_data.get('artist', '')     # Künstler
-                    values[4] = file_data.get('album', '')      # Album
-                    values[5] = file_data.get('year', '')       # Jahr
-                    values[6] = file_data.get('track', '')      # Track
-                    values[7] = file_data.get('genre', '')      # Genre
-                    values[8] = file_data.get('cover_status', 'Nein')  # Cover
-                    values[9] = 'Aktualisiert'                  # Status
-                    
-                    self.files_tree.item(item, values=values)
-                    break
-                    
+            # Checkbox automatisch aktivieren bei Änderungen
+            if item_id not in self.selected_items:
+                self.selected_items.add(item_id)
+                # Tags setzen - 'file' und 'selected'
+                self.files_tree.item(item_id, tags=['file', 'selected'])
+                self.update_selection_status()
+                
         except Exception as e:
-            print(f"Fehler beim Aktualisieren der Tabelle: {e}")
+            print(f"💥 Fehler beim Aktualisieren der Tabelle: {str(e)}")
 
     # === Integrierte Funktionen ===
     
@@ -787,6 +1202,25 @@ class MP3TaggerGUI:
         
         # Threading für Metadaten-Anreicherung
         threading.Thread(target=self._enrich_metadata_worker, args=(selected, 'musicbrainz'), daemon=True).start()
+    
+    def recognize_album(self):
+        """Startet Album-Erkennung für ausgewählte Dateien"""
+        selected = self.get_selected_files()
+        if not selected:
+            messagebox.showwarning("Warnung", "Bitte wählen Sie mindestens eine Datei aus.")
+            return
+        
+        # Album Recognition Service initialisieren
+        if not self.album_recognition:
+            try:
+                self.album_recognition = create_album_recognition_service()
+            except Exception as e:
+                messagebox.showerror("Fehler", f"Album-Erkennungs-Service konnte nicht initialisiert werden: {str(e)}")
+                return
+        
+        # Worker-Thread starten
+        self.update_status(f"Album-Erkennung für {len(selected)} Dateien gestartet...")
+        threading.Thread(target=self._recognize_album_worker, args=(selected,), daemon=True).start()
 
     def _enrich_metadata_worker(self, selected_files, service_type):
         """Worker-Thread für Metadaten-Anreicherung"""
@@ -845,6 +1279,104 @@ class MP3TaggerGUI:
         # Abschlussmeldung
         self.root.after(0, lambda: self.status_var.set(f"{service_type} abgeschlossen: {successful} erfolgreich, {errors} Fehler"))
         self.root.after(0, lambda: messagebox.showinfo("Metadaten-Anreicherung", f"{service_type} Anreicherung abgeschlossen.\n\nErfolgreich: {successful}\nFehler: {errors}"))
+
+    def _recognize_album_worker(self, selected_files):
+        """Worker-Thread für Album-Erkennung"""
+        try:
+            import asyncio
+            
+            successful = 0
+            total = len(selected_files)
+            
+            # Erstelle Loop für asynchrone Verarbeitung
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            
+            for i, file_data in enumerate(selected_files, 1):
+                try:
+                    self.root.after(0, lambda i=i, total=total: self.status_var.set(f"Album-Erkennung: {i}/{total}"))
+                    
+                    # Album-Erkennung durchführen
+                    candidates, confidence = loop.run_until_complete(
+                        self.album_recognition.recognize_album([file_data])
+                    )
+                    
+                    if candidates and confidence > 0.7:  # Mindest-Konfidenz
+                        best_candidate = candidates[0]
+                        
+                        # Album-Informationen anwenden
+                        if best_candidate.title and not file_data.get('album'):
+                            file_data['album'] = best_candidate.title
+                        if best_candidate.artist and not file_data.get('albumartist'):
+                            file_data['albumartist'] = best_candidate.artist
+                        if best_candidate.year and not file_data.get('year'):
+                            file_data['year'] = best_candidate.year
+                        
+                        # Track-Nummer aus Album-Info suchen
+                        if best_candidate.tracks:
+                            current_title = file_data.get('title', '').lower()
+                            for track in best_candidate.tracks:
+                                if track.get('title', '').lower() == current_title:
+                                    if track.get('position') and not file_data.get('track'):
+                                        file_data['track'] = str(track['position']).zfill(2)
+                                    break
+                        
+                        # UI aktualisieren
+                        self.root.after(0, lambda: self._update_file_in_table(file_data))
+                        successful += 1
+                        
+                        print(f"✅ Album erkannt für {file_data['filename']}: {best_candidate.title} (Konfidenz: {confidence:.2f})")
+                    else:
+                        print(f"⚠️ Keine Album-Übereinstimmung für {file_data['filename']}")
+                    
+                except Exception as e:
+                    print(f"💥 Fehler bei Album-Erkennung für {file_data['filename']}: {str(e)}")
+            
+            loop.close()
+            
+            # Erfolgsmeldung
+            self.root.after(0, lambda: self.status_var.set(f"Album-Erkennung abgeschlossen: {successful}/{total}"))
+            self.root.after(0, lambda: messagebox.showinfo("Album-Erkennung", 
+                f"Album-Erkennung abgeschlossen.\n\nErfolgreich: {successful}/{total}"))
+                
+        except Exception as e:
+            print(f"💥 Fehler bei Album-Erkennung: {str(e)}")
+            self.root.after(0, lambda: messagebox.showerror("Fehler", f"Fehler bei der Album-Erkennung: {str(e)}"))
+        finally:
+            self.root.after(0, lambda: self.status_var.set("Bereit"))
+
+    def auto_number_tracks(self):
+        """Automatische Track-Nummerierung für ausgewählte Dateien"""
+        selected = self.get_selected_files()
+        if not selected:
+            messagebox.showwarning("Warnung", "Bitte wählen Sie mindestens eine Datei aus.")
+            return
+        
+        # Bestätigung vom Benutzer
+        result = messagebox.askyesno("Track-Nummerierung", 
+            f"Track-Nummern für {len(selected)} Dateien automatisch vergeben?\n\n"
+            "Die Dateien werden in alphabetischer Reihenfolge nummeriert (01, 02, 03, ...)")
+        
+        if result:
+            try:
+                # Dateien nach Dateiname sortieren
+                sorted_files = sorted(selected, key=lambda f: f['filename'])
+                
+                # Track-Nummern vergeben
+                for i, file_data in enumerate(sorted_files, 1):
+                    file_data['track'] = str(i).zfill(2)
+                    # Checkbox aktivieren für veränderte Datei
+                    item_id = file_data.get('item_id')
+                    if item_id:
+                        self.files_tree.set(item_id, 'selected', '✓')
+                    # UI aktualisieren
+                    self._update_file_in_table(file_data)
+                
+                self.update_selection_status()
+                self.update_status(f"Track-Nummern für {len(selected)} Dateien vergeben")
+                
+            except Exception as e:
+                messagebox.showerror("Fehler", f"Fehler bei der Track-Nummerierung: {str(e)}")
 
     def edit_selected_metadata(self):
         """Öffnet den Metadaten-Editor für ausgewählte Dateien"""
@@ -938,7 +1470,29 @@ class MP3TaggerGUI:
         
     def run(self):
         """Startet die Anwendung"""
-        self.root.mainloop()
+        try:
+            # Cleanup-Handler für ordnungsgemäße Beendigung
+            self.root.protocol("WM_DELETE_WINDOW", self.cleanup_and_exit)
+            self.root.mainloop()
+        except KeyboardInterrupt:
+            self.cleanup_and_exit()
+    
+    def cleanup_and_exit(self):
+        """Räumt Ressourcen auf und beendet die Anwendung"""
+        try:
+            # Audio-Player beenden
+            if self.audio_player_widget:
+                self.audio_player_widget.destroy()
+            
+            # Weitere Cleanup-Operationen
+            from tagger.audio_player import cleanup_audio_player
+            cleanup_audio_player()
+            
+            print("🧹 Anwendung bereinigt")
+        except Exception as e:
+            print(f"🚨 Cleanup-Fehler: {e}")
+        finally:
+            self.root.destroy()
 
 
 
