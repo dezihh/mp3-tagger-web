@@ -119,20 +119,61 @@ class MP3TaggerGUI:
         self.audio_player_widget = AudioPlayerWidget(parent)
         
     def create_main_content(self, parent):
-        """Erstellt den Hauptinhalt mit integrierter Funktionalität"""
+        """Erstellt den Hauptinhalt mit integrierter Funktionalität und Metadaten-Panel"""
         content_frame = ttk.Frame(parent)
         content_frame.grid(row=3, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))  # Angepasst für Audio-Player
-        content_frame.columnconfigure(0, weight=1)
+        content_frame.columnconfigure(0, weight=3)  # Hauptbereich (Tabelle) bekommt mehr Platz
+        content_frame.columnconfigure(1, weight=1)  # Metadaten-Panel bekommt weniger Platz
         content_frame.rowconfigure(2, weight=1)
         
+        # Linker Bereich: Funktionen und Tabelle
+        left_frame = ttk.Frame(content_frame)
+        left_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), padx=(0, 5))
+        left_frame.columnconfigure(0, weight=1)
+        left_frame.rowconfigure(2, weight=1)
+        
         # Funktions-Toolbar
-        self.create_function_toolbar(content_frame)
+        self.create_function_toolbar(left_frame)
         
         # Dateien-Toolbar
-        self.create_files_toolbar(content_frame)
+        self.create_files_toolbar(left_frame)
         
         # Haupttabelle
-        self.create_files_table(content_frame)
+        self.create_files_table(left_frame)
+        
+        # Rechter Bereich: Metadaten-Panel mit Scrollbar
+        metadata_container = ttk.Frame(content_frame)
+        metadata_container.grid(row=0, column=1, rowspan=3, sticky=(tk.N, tk.S, tk.E, tk.W), padx=(10, 0))
+        metadata_container.rowconfigure(0, weight=1)
+        metadata_container.columnconfigure(0, weight=1)
+        
+        # Canvas für Scrolling
+        self.metadata_canvas = tk.Canvas(metadata_container, highlightthickness=0)
+        self.metadata_scrollbar = ttk.Scrollbar(metadata_container, orient="vertical", command=self.metadata_canvas.yview)
+        self.metadata_scrollable_frame = ttk.Frame(self.metadata_canvas)
+        
+        # Scrollable Frame konfigurieren
+        self.metadata_scrollable_frame.bind(
+            "<Configure>",
+            lambda e: self.metadata_canvas.configure(scrollregion=self.metadata_canvas.bbox("all"))
+        )
+        
+        # Canvas konfigurieren
+        self.metadata_canvas.create_window((0, 0), window=self.metadata_scrollable_frame, anchor="nw")
+        self.metadata_canvas.configure(yscrollcommand=self.metadata_scrollbar.set)
+        
+        # Layout
+        self.metadata_canvas.grid(row=0, column=0, sticky=(tk.N, tk.S, tk.E, tk.W))
+        self.metadata_scrollbar.grid(row=0, column=1, sticky=(tk.N, tk.S))
+        
+        # Mausrad-Support für Scrolling
+        def _on_mousewheel(event):
+            self.metadata_canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+        
+        self.metadata_canvas.bind("<MouseWheel>", _on_mousewheel)
+        
+        # Metadaten-Panel erstellen (jetzt im scrollbaren Frame)
+        self.create_metadata_panel(self.metadata_scrollable_frame)
 
     def create_function_toolbar(self, parent):
         """Erstellt die Funktions-Toolbar mit allen Hauptfunktionen"""
@@ -216,8 +257,8 @@ class MP3TaggerGUI:
         table_frame.columnconfigure(0, weight=1)
         table_frame.rowconfigure(0, weight=1)
         
-        # Treeview für Dateien (ohne Checkbox-Spalte, mit Verzeichnis-Struktur)
-        columns = ('filename', 'title', 'artist', 'album', 'year', 'track', 'genre', 'cover', 'status')
+        # Treeview für Dateien (ohne Cover/Status-Spalten, da diese im Metadaten-Panel sind)
+        columns = ('filename', 'title', 'artist', 'album', 'year', 'track', 'genre')
         self.files_tree = ttk.Treeview(table_frame, columns=columns, show='tree headings', height=20)
         
         # Spalten konfigurieren
@@ -229,20 +270,16 @@ class MP3TaggerGUI:
         self.files_tree.heading('year', text='Jahr')
         self.files_tree.heading('track', text='Track')
         self.files_tree.heading('genre', text='Genre')
-        self.files_tree.heading('cover', text='Cover')
-        self.files_tree.heading('status', text='Status')
         
-        # Spaltenbreiten
+        # Spaltenbreiten (mehr Platz für Metadaten-Spalten)
         self.files_tree.column('#0', width=250, minwidth=200)  # Tree-Spalte für Verzeichnis/Datei
         self.files_tree.column('filename', width=0, minwidth=0)  # Versteckt, da in Tree-Spalte
-        self.files_tree.column('title', width=150, minwidth=100)
-        self.files_tree.column('artist', width=120, minwidth=100)
-        self.files_tree.column('album', width=120, minwidth=100)
+        self.files_tree.column('title', width=200, minwidth=150)  # Mehr Platz
+        self.files_tree.column('artist', width=150, minwidth=120)  # Mehr Platz
+        self.files_tree.column('album', width=150, minwidth=120)  # Mehr Platz
         self.files_tree.column('year', width=60, minwidth=50)
         self.files_tree.column('track', width=50, minwidth=40)
-        self.files_tree.column('genre', width=100, minwidth=80)
-        self.files_tree.column('cover', width=80, minwidth=60)
-        self.files_tree.column('status', width=120, minwidth=80)
+        self.files_tree.column('genre', width=120, minwidth=80)
         
         # Scrollbars
         v_scrollbar = ttk.Scrollbar(table_frame, orient=tk.VERTICAL, command=self.files_tree.yview)
@@ -258,6 +295,7 @@ class MP3TaggerGUI:
         self.files_tree.bind('<Button-1>', self.toggle_row_selection)
         self.files_tree.bind('<Double-1>', self.edit_file_metadata)
         self.files_tree.bind('<Button-3>', self.show_context_menu)  # Rechtsklick für Kontextmenü
+        self.files_tree.bind('<<TreeviewSelect>>', self.on_file_selection)  # Auswahl für Metadaten-Panel
         
         # Kontextmenü erstellen
         self.create_context_menu()
@@ -267,6 +305,287 @@ class MP3TaggerGUI:
         
         # Zuordnung von Tree-Item-IDs zu Dateipfaden
         self.item_to_path = {}  # Mapping für Pfad-Ermittlung
+        
+        # System für vorgemerkte Änderungen
+        self.pending_changes = {}  # Dict: {file_path: {field: new_value}}
+        self.current_file_path = None  # Aktuell angezeigte Datei
+        self.changed_entry_fields = set()  # Set der geänderten Felder für Styling
+
+    def create_metadata_panel(self, parent):
+        """Erstellt das permanente Metadaten-Panel rechts"""
+        # Haupt-Frame für Metadaten-Panel
+        metadata_frame = ttk.LabelFrame(parent, text="📋 Metadaten", padding=10)
+        metadata_frame.pack(fill='both', expand=True)
+        metadata_frame.columnconfigure(1, weight=1)
+        
+        # Datei-Info Bereich
+        file_info_frame = ttk.LabelFrame(metadata_frame, text="📁 Datei-Information", padding=8)
+        file_info_frame.grid(row=0, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(0, 10))
+        file_info_frame.columnconfigure(1, weight=1)
+        
+        # Dateiname
+        ttk.Label(file_info_frame, text="Datei:", font=('Arial', 9, 'bold')).grid(row=0, column=0, sticky=tk.W, pady=2)
+        self.metadata_filename = tk.StringVar(value="Keine Datei ausgewählt")
+        filename_label = ttk.Label(file_info_frame, textvariable=self.metadata_filename, 
+                                  foreground='gray', font=('Arial', 9))
+        filename_label.grid(row=0, column=1, sticky=(tk.W, tk.E), pady=2, padx=(10, 0))
+        
+        # Dateigröße und Dauer
+        ttk.Label(file_info_frame, text="Größe:", font=('Arial', 9, 'bold')).grid(row=1, column=0, sticky=tk.W, pady=2)
+        self.metadata_filesize = tk.StringVar(value="-")
+        ttk.Label(file_info_frame, textvariable=self.metadata_filesize).grid(row=1, column=1, sticky=tk.W, pady=2, padx=(10, 0))
+        
+        ttk.Label(file_info_frame, text="Dauer:", font=('Arial', 9, 'bold')).grid(row=2, column=0, sticky=tk.W, pady=2)
+        self.metadata_duration = tk.StringVar(value="-")
+        ttk.Label(file_info_frame, textvariable=self.metadata_duration).grid(row=2, column=1, sticky=tk.W, pady=2, padx=(10, 0))
+        
+        # Metadaten Bereich (editierbar)
+        meta_frame = ttk.LabelFrame(metadata_frame, text="🏷️ Tags (editierbar)", padding=8)
+        meta_frame.grid(row=1, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(0, 10))
+        meta_frame.columnconfigure(1, weight=1)
+        
+        # Titel
+        ttk.Label(meta_frame, text="Titel:", font=('Arial', 9, 'bold')).grid(row=0, column=0, sticky=tk.W, pady=3)
+        self.metadata_title = tk.StringVar(value="-")
+        self.title_entry = ttk.Entry(meta_frame, textvariable=self.metadata_title, font=('Arial', 9))
+        self.title_entry.grid(row=0, column=1, sticky=(tk.W, tk.E), pady=3, padx=(10, 0))
+        self.title_entry.bind('<KeyRelease>', lambda e: self.on_metadata_change('title'))
+        
+        # Künstler
+        ttk.Label(meta_frame, text="Künstler:", font=('Arial', 9, 'bold')).grid(row=1, column=0, sticky=tk.W, pady=3)
+        self.metadata_artist = tk.StringVar(value="-")
+        self.artist_entry = ttk.Entry(meta_frame, textvariable=self.metadata_artist, font=('Arial', 9))
+        self.artist_entry.grid(row=1, column=1, sticky=(tk.W, tk.E), pady=3, padx=(10, 0))
+        self.artist_entry.bind('<KeyRelease>', lambda e: self.on_metadata_change('artist'))
+        
+        # Album
+        ttk.Label(meta_frame, text="Album:", font=('Arial', 9, 'bold')).grid(row=2, column=0, sticky=tk.W, pady=3)
+        self.metadata_album = tk.StringVar(value="-")
+        self.album_entry = ttk.Entry(meta_frame, textvariable=self.metadata_album, font=('Arial', 9))
+        self.album_entry.grid(row=2, column=1, sticky=(tk.W, tk.E), pady=3, padx=(10, 0))
+        self.album_entry.bind('<KeyRelease>', lambda e: self.on_metadata_change('album'))
+        
+        # Jahr
+        ttk.Label(meta_frame, text="Jahr:", font=('Arial', 9, 'bold')).grid(row=3, column=0, sticky=tk.W, pady=3)
+        self.metadata_year = tk.StringVar(value="-")
+        self.year_entry = ttk.Entry(meta_frame, textvariable=self.metadata_year, font=('Arial', 9), width=8)
+        self.year_entry.grid(row=3, column=1, sticky=tk.W, pady=3, padx=(10, 0))
+        self.year_entry.bind('<KeyRelease>', lambda e: self.on_metadata_change('year'))
+        
+        # Track
+        ttk.Label(meta_frame, text="Track:", font=('Arial', 9, 'bold')).grid(row=4, column=0, sticky=tk.W, pady=3)
+        self.metadata_track = tk.StringVar(value="-")
+        self.track_entry = ttk.Entry(meta_frame, textvariable=self.metadata_track, font=('Arial', 9), width=8)
+        self.track_entry.grid(row=4, column=1, sticky=tk.W, pady=3, padx=(10, 0))
+        self.track_entry.bind('<KeyRelease>', lambda e: self.on_metadata_change('track'))
+        
+        # Genre
+        ttk.Label(meta_frame, text="Genre:", font=('Arial', 9, 'bold')).grid(row=5, column=0, sticky=tk.W, pady=3)
+        self.metadata_genre = tk.StringVar(value="-")
+        self.genre_entry = ttk.Entry(meta_frame, textvariable=self.metadata_genre, font=('Arial', 9))
+        self.genre_entry.grid(row=5, column=1, sticky=(tk.W, tk.E), pady=3, padx=(10, 0))
+        self.genre_entry.bind('<KeyRelease>', lambda e: self.on_metadata_change('genre'))
+        
+        # Cover Bereich
+        cover_frame = ttk.LabelFrame(metadata_frame, text="🖼️ Cover", padding=8)
+        cover_frame.grid(row=2, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(0, 10))
+        cover_frame.columnconfigure(0, weight=1)
+        
+        # Vorgemerkte Änderungen anzeigen (vor Cover-Bereich)
+        self.changes_frame = ttk.LabelFrame(metadata_frame, text="📝 Vorgemerkte Änderungen", padding=8)
+        self.changes_frame.grid(row=3, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(0, 10))
+        self.changes_frame.columnconfigure(0, weight=1)
+        
+        self.changes_text = tk.Text(self.changes_frame, height=3, wrap=tk.WORD, font=('Arial', 8))
+        self.changes_text.pack(fill='both', expand=True)
+        self.changes_text.config(state='disabled')  # Nur anzeigen, nicht editieren
+        
+        # Cover Status
+        self.metadata_cover_status = tk.StringVar(value="Kein Cover")
+        ttk.Label(cover_frame, textvariable=self.metadata_cover_status, 
+                 foreground='gray').grid(row=0, column=0, pady=5)
+        
+        # Cover Vorschau mit Bild-Label
+        self.cover_preview_frame = ttk.Frame(cover_frame)
+        self.cover_preview_frame.grid(row=1, column=0, pady=5)
+        
+        # Cover-Image-Label mit Standardgröße
+        self.metadata_cover_image = tk.Label(self.cover_preview_frame, 
+                                           width=25, height=15, 
+                                           bg='lightgray', 
+                                           text='Kein Cover\nverfügbar', 
+                                           compound='center',
+                                           relief='sunken',
+                                           borderwidth=1)
+        self.metadata_cover_image.pack()
+        
+        # Aktionen Bereich
+        actions_frame = ttk.LabelFrame(metadata_frame, text="⚡ Aktionen", padding=8)
+        actions_frame.grid(row=5, column=0, columnspan=2, sticky=(tk.W, tk.E))
+        actions_frame.columnconfigure(0, weight=1)
+        
+        # Buttons
+        ttk.Button(actions_frame, text="🎵 Vorhören", 
+                  command=self.play_selected_file).grid(row=0, column=0, sticky=(tk.W, tk.E), pady=2)
+        ttk.Button(actions_frame, text="✏️ Bearbeiten", 
+                  command=self.edit_file_metadata_from_context).grid(row=1, column=0, sticky=(tk.W, tk.E), pady=2)
+        ttk.Button(actions_frame, text="🖼️ Cover wählen", 
+                  command=self.select_cover_for_file).grid(row=2, column=0, sticky=(tk.W, tk.E), pady=2)
+
+    def update_metadata_panel(self, file_path=None):
+        """Aktualisiert das Metadaten-Panel mit Informationen zur ausgewählten Datei"""
+        if not file_path or not os.path.exists(file_path):
+            # Keine Datei ausgewählt - Panel zurücksetzen
+            self.current_file_path = None
+            self.clear_metadata_panel()
+            return
+        
+        # Aktuellen Dateipfad setzen
+        self.current_file_path = file_path
+        
+        try:
+            # Datei-Information
+            filename = os.path.basename(file_path)
+            self.metadata_filename.set(filename)
+            
+            # Dateigröße
+            file_size = os.path.getsize(file_path)
+            size_mb = file_size / (1024 * 1024)
+            self.metadata_filesize.set(f"{size_mb:.1f} MB")
+            
+            # Metadaten laden
+            from mutagen.mp3 import MP3
+            mp3_file = MP3(file_path)
+            
+            # Dauer
+            if hasattr(mp3_file, 'info') and mp3_file.info.length:
+                duration = mp3_file.info.length
+                minutes = int(duration // 60)
+                seconds = int(duration % 60)
+                self.metadata_duration.set(f"{minutes}:{seconds:02d}")
+            else:
+                self.metadata_duration.set("-")
+            
+            # Tags (mit vorgemerkten Änderungen)
+            original_title = mp3_file.get('TIT2', [''])[0] if mp3_file.get('TIT2') else ""
+            original_artist = mp3_file.get('TPE1', [''])[0] if mp3_file.get('TPE1') else ""
+            original_album = mp3_file.get('TALB', [''])[0] if mp3_file.get('TALB') else ""
+            original_year = mp3_file.get('TDRC', [''])[0] if mp3_file.get('TDRC') else ""
+            original_track = mp3_file.get('TRCK', [''])[0] if mp3_file.get('TRCK') else ""
+            original_genre = mp3_file.get('TCON', [''])[0] if mp3_file.get('TCON') else ""
+            
+            # Vorgemerkte Änderungen berücksichtigen
+            pending = self.pending_changes.get(file_path, {})
+            
+            self.metadata_title.set(pending.get('title', original_title))
+            self.metadata_artist.set(pending.get('artist', original_artist))
+            self.metadata_album.set(pending.get('album', original_album))
+            self.metadata_year.set(pending.get('year', original_year))
+            self.metadata_track.set(pending.get('track', original_track))
+            self.metadata_genre.set(pending.get('genre', original_genre))
+            
+            # Entry-Felder styling (kursiv für geänderte Werte)
+            entry_fields = {
+                'title': self.title_entry,
+                'artist': self.artist_entry,
+                'album': self.album_entry,
+                'year': self.year_entry,
+                'track': self.track_entry,
+                'genre': self.genre_entry
+            }
+            
+            for field, entry_widget in entry_fields.items():
+                if field in pending:
+                    # Geändert - kursiv
+                    entry_widget.configure(font=('Arial', 9, 'italic'))
+                else:
+                    # Unverändert - normal
+                    entry_widget.configure(font=('Arial', 9))
+            
+            # Cover Status und Anzeige
+            cover_found = False
+            cover_image = None
+            
+            # Internes Cover prüfen
+            if mp3_file.get('APIC:'):
+                try:
+                    from PIL import Image, ImageTk
+                    import io
+                    
+                    apic = mp3_file.get('APIC:')
+                    if apic.data:
+                        # Cover-Bild laden und anzeigen
+                        image = Image.open(io.BytesIO(apic.data))
+                        # Bild auf passende Größe skalieren (max 180x180)
+                        image.thumbnail((180, 180), Image.Resampling.LANCZOS)
+                        cover_image = ImageTk.PhotoImage(image)
+                        
+                        # Bild im Label anzeigen
+                        self.metadata_cover_image.configure(image=cover_image, text="")
+                        self.metadata_cover_image.image = cover_image  # Referenz halten
+                        
+                        # Status setzen
+                        self.metadata_cover_status.set(f"✅ Internes Cover ({image.size[0]}x{image.size[1]})")
+                        cover_found = True
+                except Exception as e:
+                    print(f"Fehler beim Laden des internen Covers: {e}")
+                    self.metadata_cover_status.set("✅ Internes Cover (Fehler beim Anzeigen)")
+            
+            # Externes Cover prüfen (wenn kein internes gefunden oder angezeigt)
+            if not cover_found:
+                try:
+                    from PIL import Image, ImageTk
+                    
+                    cover_extensions = ['.jpg', '.jpeg', '.png', '.bmp']
+                    directory = os.path.dirname(file_path)
+                    
+                    # Standard Cover-Namen prüfen
+                    cover_names = ['cover', 'folder', 'album', 'front']
+                    for cover_name in cover_names:
+                        for ext in cover_extensions:
+                            cover_path = os.path.join(directory, f"{cover_name}{ext}")
+                            if os.path.exists(cover_path):
+                                try:
+                                    image = Image.open(cover_path)
+                                    image.thumbnail((180, 180), Image.Resampling.LANCZOS)
+                                    cover_image = ImageTk.PhotoImage(image)
+                                    
+                                    self.metadata_cover_image.configure(image=cover_image, text="")
+                                    self.metadata_cover_image.image = cover_image
+                                    
+                                    self.metadata_cover_status.set(f"📁 Externes Cover ({image.size[0]}x{image.size[1]})")
+                                    cover_found = True
+                                    break
+                                except Exception as e:
+                                    print(f"Fehler beim Laden des externen Covers: {e}")
+                        if cover_found:
+                            break
+                except ImportError:
+                    print("PIL nicht verfügbar für Cover-Anzeige")
+            
+            # Kein Cover gefunden
+            if not cover_found:
+                self.metadata_cover_image.configure(image="", text="Kein Cover\nverfügbar")
+                self.metadata_cover_image.image = None
+                self.metadata_cover_status.set("❌ Kein Cover")
+            
+            print(f"📋 Metadaten-Panel aktualisiert: {filename}")
+            
+            # Änderungen-Panel aktualisieren
+            self.update_changes_display()
+            
+        except Exception as e:
+            print(f"🚨 Fehler beim Laden der Metadaten: {e}")
+            self.metadata_filename.set(f"Fehler: {os.path.basename(file_path)}")
+            self.metadata_filesize.set("Fehler")
+            self.metadata_duration.set("Fehler")
+            self.metadata_title.set("Fehler beim Laden")
+            self.metadata_artist.set("-")
+            self.metadata_album.set("-")
+            self.metadata_year.set("-")
+            self.metadata_track.set("-")
+            self.metadata_genre.set("-")
+            self.metadata_cover_status.set("❌ Fehler")
 
     def create_status_bar(self, parent, row=3):
         """Erstellt die Status Bar"""
@@ -287,6 +606,230 @@ class MP3TaggerGUI:
         self.context_menu.add_command(label="✅ Markieren", command=self.mark_selected_file)
         self.context_menu.add_command(label="❌ Markierung entfernen", command=self.unmark_selected_file)
 
+    def on_file_selection(self, event):
+        """Event-Handler für Datei-Auswahl - aktualisiert Metadaten-Panel"""
+        selection = self.files_tree.selection()
+        if selection:
+            selected_item = selection[0]
+            file_path = self.get_file_path_from_tree_item(selected_item)
+            if file_path:
+                self.update_metadata_panel(file_path)
+            else:
+                self.clear_metadata_panel()
+        else:
+            self.clear_metadata_panel()
+    
+    def on_metadata_change(self, field):
+        """Wird aufgerufen wenn ein Metadaten-Feld geändert wird"""
+        if not self.current_file_path:
+            return
+            
+        # Aktuellen Wert aus dem Entry-Feld holen
+        field_vars = {
+            'title': self.metadata_title,
+            'artist': self.metadata_artist, 
+            'album': self.metadata_album,
+            'year': self.metadata_year,
+            'track': self.metadata_track,
+            'genre': self.metadata_genre
+        }
+        
+        if field not in field_vars:
+            return
+            
+        new_value = field_vars[field].get()
+        
+        # Vorgemerkte Änderungen verwalten
+        if self.current_file_path not in self.pending_changes:
+            self.pending_changes[self.current_file_path] = {}
+            
+        # Originalwert aus der Datei laden (zur Vergleich)
+        original_value = self.get_original_metadata_value(self.current_file_path, field)
+        
+        if new_value != original_value:
+            # Änderung vormerken
+            self.pending_changes[self.current_file_path][field] = new_value
+            self.changed_entry_fields.add(field)
+            
+            # Entry-Feld kursiv markieren 
+            entry_widgets = {
+                'title': self.title_entry,
+                'artist': self.artist_entry,
+                'album': self.album_entry,
+                'year': self.year_entry,
+                'track': self.track_entry,
+                'genre': self.genre_entry
+            }
+            if field in entry_widgets:
+                entry_widgets[field].configure(font=('Arial', 9, 'italic'))
+                
+            print(f"📝 Änderung vorgemerkt: {field} = '{new_value}' für {os.path.basename(self.current_file_path)}")
+        else:
+            # Änderung zurückgenommen
+            if field in self.pending_changes.get(self.current_file_path, {}):
+                del self.pending_changes[self.current_file_path][field]
+            self.changed_entry_fields.discard(field)
+            
+            # Entry-Feld normal markieren
+            entry_widgets = {
+                'title': self.title_entry,
+                'artist': self.artist_entry,
+                'album': self.album_entry,
+                'year': self.year_entry,
+                'track': self.track_entry,
+                'genre': self.genre_entry
+            }
+            if field in entry_widgets:
+                entry_widgets[field].configure(font=('Arial', 9))
+        
+        # Änderungen-Panel aktualisieren
+        self.update_changes_display()
+        
+        # Bei mehreren ausgewählten Dateien auch auf diese anwenden
+        selected = self.files_tree.selection()
+        if len(selected) > 1:
+            self.apply_change_to_multiple_files(field, new_value)
+    
+    def get_original_metadata_value(self, file_path, field):
+        """Holt den ursprünglichen Metadaten-Wert aus der Datei"""
+        try:
+            from mutagen.mp3 import MP3
+            mp3_file = MP3(file_path)
+            
+            field_map = {
+                'title': 'TIT2',
+                'artist': 'TPE1', 
+                'album': 'TALB',
+                'year': 'TDRC',
+                'track': 'TRCK',
+                'genre': 'TCON'
+            }
+            
+            if field in field_map:
+                tag_value = mp3_file.get(field_map[field])
+                if tag_value:
+                    return str(tag_value[0])
+            return ""
+        except:
+            return ""
+    
+    def apply_change_to_multiple_files(self, field, new_value):
+        """Wendet Änderung auf alle ausgewählten Dateien an"""
+        selected = self.files_tree.selection()
+        for item in selected:
+            file_path = self.get_file_path_from_tree_item(item)
+            if file_path and file_path != self.current_file_path:
+                # Änderung für andere Dateien vormerken
+                if file_path not in self.pending_changes:
+                    self.pending_changes[file_path] = {}
+                self.pending_changes[file_path][field] = new_value
+                
+                # In der Tabelle kursiv anzeigen (wenn geändert)
+                original_value = self.get_original_metadata_value(file_path, field)
+                if new_value != original_value:
+                    self.mark_table_field_as_changed(item, field)
+                    
+        print(f"📝 Änderung '{field}={new_value}' auf {len(selected)} Dateien angewendet")
+    
+    def mark_table_field_as_changed(self, item, field):
+        """Markiert ein Feld in der Tabelle als geändert (durch Prefix)"""
+        try:
+            # Aktuelle Werte holen
+            values = list(self.files_tree.item(item, 'values'))
+            if not values:
+                return
+                
+            # Field-Mapping für die Spalten
+            field_map = {
+                'title': 1,    # filename ist hidden, title ist Index 1
+                'artist': 2,
+                'album': 3,
+                'year': 4,
+                'track': 5,
+                'genre': 6
+            }
+            
+            if field in field_map:
+                col_index = field_map[field]
+                if col_index < len(values):
+                    current_value = values[col_index]
+                    # Markierung hinzufügen wenn noch nicht vorhanden
+                    if not current_value.startswith('⚠️ '):
+                        values[col_index] = f"⚠️ {current_value}"
+                        self.files_tree.item(item, values=tuple(values))
+                        
+            # Auch den Dateinamen markieren wenn Änderungen vorhanden
+            current_text = self.files_tree.item(item, 'text')
+            if not current_text.startswith('⚠️ ') and not current_text.startswith('🖼️ ⚠️'):
+                if current_text.startswith('🖼️ '):
+                    # Cover-Symbol vorhanden - nach dem Cover-Symbol einfügen
+                    new_text = current_text.replace('🖼️ ', '🖼️ ⚠️ ')
+                else:
+                    # Kein Cover-Symbol - am Anfang einfügen
+                    new_text = f"⚠️ {current_text}"
+                self.files_tree.item(item, text=new_text)
+                
+        except Exception as e:
+            print(f"🚨 Fehler beim Markieren des Tabellenfelds: {e}")
+    
+    def update_changes_display(self):
+        """Aktualisiert die Anzeige der vorgemerkten Änderungen"""
+        self.changes_text.config(state='normal')
+        self.changes_text.delete(1.0, tk.END)
+        
+        if not self.pending_changes:
+            self.changes_text.insert(tk.END, "Keine Änderungen vorgemerkt.")
+        else:
+            total_files = len(self.pending_changes)
+            total_changes = sum(len(changes) for changes in self.pending_changes.values())
+            
+            self.changes_text.insert(tk.END, f"📝 {total_changes} Änderungen in {total_files} Dateien:\n\n")
+            
+            for file_path, changes in self.pending_changes.items():
+                if changes:  # Nur wenn wirklich Änderungen vorhanden
+                    filename = os.path.basename(file_path)
+                    change_list = [f"{field}='{value}'" for field, value in changes.items()]
+                    self.changes_text.insert(tk.END, f"• {filename}: {', '.join(change_list)}\n")
+        
+        self.changes_text.config(state='disabled')
+    
+    def clear_metadata_panel(self):
+        """Leert das Metadaten-Panel wenn keine Datei ausgewählt ist"""
+        self.current_file_path = None
+        self.metadata_filename.set("Keine Datei ausgewählt")
+        self.metadata_filesize.set("-")
+        self.metadata_duration.set("-")
+        self.metadata_title.set("-")
+        self.metadata_artist.set("-")
+        self.metadata_album.set("-")
+        self.metadata_year.set("-")
+        self.metadata_track.set("-")
+        self.metadata_genre.set("-")
+        self.metadata_cover_status.set("Kein Cover")
+        
+        # Cover-Bild zurücksetzen
+        if hasattr(self, 'metadata_cover_image'):
+            self.metadata_cover_image.configure(image="", text="Kein Cover\nverfügbar")
+            self.metadata_cover_image.image = None
+            
+        # Entry-Felder normal formatieren (nicht kursiv)
+        if hasattr(self, 'title_entry'):
+            self.title_entry.configure(font=('Arial', 9))
+        if hasattr(self, 'artist_entry'):
+            self.artist_entry.configure(font=('Arial', 9))
+        if hasattr(self, 'album_entry'):
+            self.album_entry.configure(font=('Arial', 9))
+        if hasattr(self, 'year_entry'):
+            self.year_entry.configure(font=('Arial', 9))
+        if hasattr(self, 'track_entry'):
+            self.track_entry.configure(font=('Arial', 9))
+        if hasattr(self, 'genre_entry'):
+            self.genre_entry.configure(font=('Arial', 9))
+            
+        # Änderungen-Panel aktualisieren
+        if hasattr(self, 'changes_text'):
+            self.update_changes_display()
+
     def show_context_menu(self, event):
         """Zeigt das Kontextmenü"""
         # Item unter Mauszeiger ermitteln
@@ -297,7 +840,7 @@ class MP3TaggerGUI:
             
             # Prüfe ob es eine Datei ist (nicht Verzeichnis)
             item_tags = self.files_tree.item(item, 'tags')
-            if 'file' in item_tags or 'selected' in item_tags:
+            if 'file' in item_tags:  # Vereinfacht: nur 'file' Tag prüfen
                 # Kontextmenü anzeigen
                 try:
                     self.context_menu.tk_popup(event.x_root, event.y_root)
@@ -558,8 +1101,35 @@ class MP3TaggerGUI:
             
             # Dateien unter Verzeichnis-Knoten einfügen
             for file_data in sorted(files, key=lambda f: f.get('filename', '')):
+                # Cover-Status für Symbol bestimmen
+                filename = file_data.get('filename', '')
+                filepath = file_data.get('filepath', '')
+                has_cover = False
+                
+                try:
+                    # Schnelle Cover-Prüfung
+                    if filepath:
+                        from mutagen.mp3 import MP3
+                        mp3_file = MP3(filepath)
+                        if mp3_file.get('APIC:'):
+                            has_cover = True
+                        else:
+                            # Externes Cover prüfen (nur häufigste Namen)
+                            directory = os.path.dirname(filepath)
+                            for cover_name in ['cover.jpg', 'folder.jpg', 'album.jpg']:
+                                if os.path.exists(os.path.join(directory, cover_name)):
+                                    has_cover = True
+                                    break
+                except:
+                    pass
+                
+                # Dateiname mit Cover-Symbol wenn vorhanden
+                display_name = filename
+                if has_cover:
+                    display_name = f"🖼️ {filename}"
+                
                 item_id = self.files_tree.insert(dir_item, 'end',
-                    text=file_data.get('filename', ''),
+                    text=display_name,  # Dateiname mit optionalem Cover-Symbol
                     values=(
                         '',  # Versteckte filename-Spalte (steht jetzt in text)
                         file_data.get('title', ''),
@@ -567,9 +1137,7 @@ class MP3TaggerGUI:
                         file_data.get('album', ''),
                         file_data.get('year', ''),
                         file_data.get('track', ''),
-                        file_data.get('genre', ''),
-                        file_data.get('cover_status', 'Nein'),
-                        ''  # Status
+                        file_data.get('genre', '')
                     ),
                     tags=('file',))
                 
@@ -585,21 +1153,14 @@ class MP3TaggerGUI:
         self.status_var.set(f"Gefunden: {len(self.mp3_files)} MP3-Dateien")
         self.update_selection_status()
         
-        # Tags für visuelle Unterscheidung konfigurieren - mit hohem Kontrast
+        # Tags für visuelle Unterscheidung konfigurieren (vereinfacht)
         self.files_tree.tag_configure('directory', background='#f0f0f0', font=('Arial', 9, 'bold'), foreground='black')
         self.files_tree.tag_configure('file', background='white', foreground='black', font=('Arial', 9))
         
-        # Sehr kontrastreiches Schema für ausgewählte Elemente
-        self.files_tree.tag_configure('selected', background='#ff0000', foreground='#ffffff', font=('Arial', 9, 'bold'))  # Rot/Weiß für maximale Sichtbarkeit
-        
-        # Alternative Fallback-Konfiguration für problematische tkinter-Versionen
-        try:
-            self.files_tree.tag_configure('selected_highlight', background='#00ff00', foreground='#000000', font=('Arial', 9, 'bold'))  # Grün/Schwarz Fallback
-            print("🎨 Tags konfiguriert - ROT für ausgewählte Dateien")
-        except Exception as e:
-            print(f"🚨 Tag-Fallback-Fehler: {e}")
+        # ENTFERNT: Verwirrende 'selected' Tags - wir nutzen die Standard TreeView Auswahl
+        print("🎨 Tags konfiguriert - Standard TreeView Auswahl")
 
-    # === Datei-Auswahl und -Management ===
+    # === Datei-Auswahl und -Management (vereinfacht) ===
     
     def toggle_row_selection(self, event):
         """Zeilen-basierte Markierung statt Checkbox-Klick"""
@@ -792,16 +1353,14 @@ class MP3TaggerGUI:
                 file_data.get('album', ''),
                 file_data.get('year', ''),
                 file_data.get('track', ''),
-                file_data.get('genre', ''),
-                file_data.get('cover_status', 'Nein'),
-                'Aktualisiert'  # Status
+                file_data.get('genre', '')
             ))
             
             # Checkbox automatisch aktivieren bei Änderungen
             if item_id not in self.selected_items:
                 self.selected_items.add(item_id)
-                # Tags setzen - 'file' und 'selected'
-                self.files_tree.item(item_id, tags=['file', 'selected'])
+                # Nur 'file' Tag setzen - keine verwirrende rote Markierung
+                self.files_tree.item(item_id, tags=['file'])
                 self.update_selection_status()
                 
         except Exception as e:
@@ -1444,29 +2003,121 @@ class MP3TaggerGUI:
                 self.edit_single_file_metadata(file_info)
 
     def save_selected_files(self):
-        """Speichert die ausgewählten Dateien"""
-        selected = self.get_selected_files()
-        if not selected:
-            messagebox.showwarning("Warnung", "Keine Dateien ausgewählt.")
+        """Speichert alle vorgemerkten Änderungen"""
+        if not self.pending_changes:
+            messagebox.showinfo("Info", "Keine Änderungen zum Speichern.")
             return
             
-        self.status_var.set("Speichere Dateien...")
+        # Bestätigung vom Benutzer
+        total_files = len(self.pending_changes)
+        total_changes = sum(len(changes) for changes in self.pending_changes.values())
         
-        # Threading für Speichervorgang
-        threading.Thread(target=self._save_files_worker, args=(selected,), daemon=True).start()
+        result = messagebox.askyesno("Änderungen speichern", 
+            f"Sollen {total_changes} Änderungen in {total_files} Dateien gespeichert werden?\n\n"
+            "Diese Aktion kann nicht rückgängig gemacht werden!")
         
-    def _save_files_worker(self, files_to_save):
-        """Worker-Thread für das Speichern von Dateien"""
-        try:
-            # Hier würde der echte Speichervorgang stattfinden
-            import time
-            time.sleep(1)  # Simuliere Speichervorgang
+        if result:
+            self.status_var.set("Speichere Änderungen...")
             
-            self.root.after(0, lambda: self.status_var.set(f"{len(files_to_save)} Dateien gespeichert"))
-            self.root.after(0, lambda: messagebox.showinfo("Erfolg", f"{len(files_to_save)} Dateien erfolgreich gespeichert."))
+            # Threading für Speichervorgang
+            threading.Thread(target=self._save_pending_changes_worker, daemon=True).start()
+        
+    def _save_pending_changes_worker(self):
+        """Worker-Thread für das Speichern von vorgemerkten Änderungen"""
+        try:
+            success_count = 0
+            error_count = 0
+            
+            for file_path, changes in self.pending_changes.items():
+                try:
+                    # Metadaten in die MP3-Datei schreiben
+                    from mutagen.mp3 import MP3
+                    from mutagen.id3 import ID3, TIT2, TPE1, TALB, TDRC, TRCK, TCON
+                    
+                    # MP3-Datei laden
+                    mp3_file = MP3(file_path)
+                    
+                    # Änderungen anwenden
+                    if 'title' in changes:
+                        mp3_file['TIT2'] = TIT2(encoding=3, text=changes['title'])
+                    if 'artist' in changes:
+                        mp3_file['TPE1'] = TPE1(encoding=3, text=changes['artist'])
+                    if 'album' in changes:
+                        mp3_file['TALB'] = TALB(encoding=3, text=changes['album'])
+                    if 'year' in changes:
+                        mp3_file['TDRC'] = TDRC(encoding=3, text=changes['year'])
+                    if 'track' in changes:
+                        mp3_file['TRCK'] = TRCK(encoding=3, text=changes['track'])
+                    if 'genre' in changes:
+                        mp3_file['TCON'] = TCON(encoding=3, text=changes['genre'])
+                    
+                    # Datei speichern
+                    mp3_file.save()
+                    success_count += 1
+                    
+                    print(f"✅ Gespeichert: {os.path.basename(file_path)}")
+                    
+                except Exception as e:
+                    error_count += 1
+                    print(f"❌ Fehler bei {os.path.basename(file_path)}: {e}")
+            
+            # UI-Updates im Hauptthread
+            self.root.after(0, self._on_save_complete, success_count, error_count)
+            
         except Exception as e:
             self.root.after(0, lambda: messagebox.showerror("Fehler", f"Fehler beim Speichern: {str(e)}"))
             self.root.after(0, lambda: self.status_var.set("Fehler beim Speichern"))
+    
+    def _on_save_complete(self, success_count, error_count):
+        """Wird nach erfolgreichem Speichern aufgerufen"""
+        # Vorgemerkte Änderungen leeren
+        self.pending_changes.clear()
+        self.changed_entry_fields.clear()
+        
+        # Tabellen-Markierungen entfernen
+        self.clear_table_change_markers()
+        
+        # Metadaten-Panel aktualisieren (normale Schrift)
+        if self.current_file_path:
+            self.update_metadata_panel(self.current_file_path)
+        
+        # Dateitabelle aktualisieren (neues Scannen)
+        if hasattr(self, 'current_directory') and self.current_directory.get():
+            self.scan_directory()
+        
+        # Status und Meldung
+        if error_count == 0:
+            self.status_var.set(f"✅ {success_count} Dateien erfolgreich gespeichert")
+            messagebox.showinfo("Erfolg", f"{success_count} Dateien erfolgreich gespeichert!")
+        else:
+            self.status_var.set(f"⚠️ {success_count} gespeichert, {error_count} Fehler")
+            messagebox.showwarning("Teilweise erfolgreich", 
+                f"{success_count} Dateien gespeichert\n{error_count} Dateien mit Fehlern")
+        
+        print(f"💾 Speichervorgang abgeschlossen: {success_count} erfolgreich, {error_count} Fehler")
+    
+    def clear_table_change_markers(self):
+        """Entfernt alle Änderungs-Markierungen aus der Tabelle"""
+        try:
+            for dir_item in self.files_tree.get_children():
+                for file_item in self.files_tree.get_children(dir_item):
+                    # Text-Markierungen entfernen
+                    current_text = self.files_tree.item(file_item, 'text')
+                    if '⚠️' in current_text:
+                        clean_text = current_text.replace('⚠️ ', '').replace(' ⚠️', '')
+                        self.files_tree.item(file_item, text=clean_text)
+                    
+                    # Werte-Markierungen entfernen
+                    values = list(self.files_tree.item(file_item, 'values'))
+                    clean_values = []
+                    for value in values:
+                        if isinstance(value, str) and value.startswith('⚠️ '):
+                            clean_values.append(value[3:])  # '⚠️ ' entfernen
+                        else:
+                            clean_values.append(value)
+                    self.files_tree.item(file_item, values=tuple(clean_values))
+        except Exception as e:
+            print(f"🚨 Fehler beim Entfernen der Tabellen-Markierungen: {e}")
         
     def run(self):
         """Startet die Anwendung"""
