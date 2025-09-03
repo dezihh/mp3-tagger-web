@@ -227,10 +227,39 @@ class MP3FileInfo:
                         self.extended_metadata['genres'] = all_genres
                     
                     elif desc == 'MOOD' and value:
-                        self.extended_metadata['mood'] = [m.strip() for m in value.split(',')]
+                        # Mood als String speichern (nicht als Liste)
+                        self.extended_metadata['mood'] = value
                     
                     elif desc == 'SIMILAR_ARTISTS' and value:
                         self.extended_metadata['similar_artists'] = [a.strip() for a in value.split(',')]
+                    
+                    elif desc == 'SIMILAR_ARTIST' and value:  # GUI verwendet singular
+                        self.extended_metadata['similar_artist'] = value
+                    
+                    elif desc == 'ENERGY' and value:
+                        try:
+                            self.extended_metadata['energy'] = float(value)
+                        except ValueError:
+                            self.extended_metadata['energy'] = value
+                    
+                    elif desc == 'DANCEABILITY' and value:
+                        try:
+                            self.extended_metadata['danceability'] = float(value)
+                        except ValueError:
+                            self.extended_metadata['danceability'] = value
+                    
+                    elif desc == 'URL' and value:
+                        self.extended_metadata['url'] = value
+                    
+                    elif desc == 'ERA' and value:
+                        self.extended_metadata['era'] = value
+                    
+                    elif desc == 'STYLE' and value:
+                        self.extended_metadata['style'] = value
+                    
+                    elif desc == 'ENERGY_LEVEL' and value:
+                        # Als String beibehalten für Konsistenz
+                        self.extended_metadata['energy_level'] = value
                     
                     elif desc == 'AUDIO_FEATURES' and value:
                         # Parse Audio Features: "energy:0.825, danceability:0.742, valence:0.893"
@@ -285,6 +314,42 @@ class MP3FileInfo:
                             pass
                     elif field_name == 'similar_artists':
                         self.extended_metadata['similar_artists'] = [a.strip() for a in value.split(',')]
+            
+            # Weitere Standard-Tags für Advanced Metadata
+            # Rating (POPM)
+            for key in audio.keys():
+                if key.startswith('POPM'):
+                    try:
+                        rating = audio[key].rating
+                        if rating > 0:
+                            self.extended_metadata['rating'] = str(int(rating / 51))  # 0-255 -> 0-5
+                        break
+                    except:
+                        pass
+            
+            # Comment (COMM)
+            if 'COMM::eng' in audio:
+                self.extended_metadata['comment'] = str(audio['COMM::eng'].text[0])
+            elif 'COMM' in audio:
+                # Fallback für COMM ohne spezifische Sprache
+                for key in audio.keys():
+                    if key.startswith('COMM:'):
+                        self.extended_metadata['comment'] = str(audio[key].text[0])
+                        break
+            
+            # Lyrics (USLT)
+            if 'USLT::eng' in audio:
+                self.extended_metadata['lyrics'] = str(audio['USLT::eng'].text)
+            elif 'USLT' in audio:
+                # Fallback für USLT ohne spezifische Sprache
+                for key in audio.keys():
+                    if key.startswith('USLT:'):
+                        self.extended_metadata['lyrics'] = str(audio[key].text)
+                        break
+            
+            # Release Year (TDRL)
+            if 'TDRL' in audio:
+                self.extended_metadata['release_year'] = str(audio['TDRL'][0])
             
             # Prüfen ob erweiterte Daten vorhanden sind
             self.extended_metadata['has_extended_data'] = any([

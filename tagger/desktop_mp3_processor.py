@@ -19,20 +19,86 @@ class DesktopMP3Processor:
         
     def read_id3_tags(self, file_path):
         """Liest ID3-Tags einer MP3-Datei"""
-        return mp3_processor.read_mp3_file(file_path)
+        try:
+            # Erstelle MP3FileInfo Objekt um Tags zu lesen
+            mp3_info = mp3_processor.MP3FileInfo(file_path)
+            
+            # Konvertiere zu Dictionary-Format für GUI-Kompatibilität
+            return {
+                'title': mp3_info.title or '',
+                'artist': mp3_info.artist or '',
+                'album': mp3_info.album or '',
+                'year': mp3_info.year or '',
+                'track': mp3_info.track_number or '',
+                'genre': mp3_info.genre or '',
+                'extended_metadata': mp3_info.extended_metadata or {}
+            }
+        except Exception as e:
+            print(f"Fehler beim Lesen der ID3-Tags für {file_path}: {e}")
+            return {
+                'title': '', 'artist': '', 'album': '', 'year': '', 'track': '', 'genre': '',
+                'extended_metadata': {}
+            }
         
     def write_id3_tags(self, file_path, tags):
         """Schreibt ID3-Tags in eine MP3-Datei"""
-        # Erstelle das erwartete Format für save_mp3_tags
-        file_data = {
-            'filepath': file_path,
-            **tags
-        }
-        
-        files_data = {'files': [file_data]}
-        result = mp3_processor.save_mp3_tags(files_data)
-        
-        return result.get('success', False)
+        try:
+            from mutagen.mp3 import MP3
+            from mutagen.id3 import ID3, TIT2, TPE1, TALB, TDRC, TRCK, TCON, TXXX, TBPM, POPM, COMM, USLT, TDRL
+            
+            # MP3-Datei laden
+            mp3_file = MP3(file_path)
+            
+            # Basis-Tags setzen
+            if 'title' in tags and tags['title']:
+                mp3_file['TIT2'] = TIT2(encoding=3, text=tags['title'])
+            if 'artist' in tags and tags['artist']:
+                mp3_file['TPE1'] = TPE1(encoding=3, text=tags['artist'])
+            if 'album' in tags and tags['album']:
+                mp3_file['TALB'] = TALB(encoding=3, text=tags['album'])
+            if 'year' in tags and tags['year']:
+                mp3_file['TDRC'] = TDRC(encoding=3, text=tags['year'])
+            if 'track' in tags and tags['track']:
+                mp3_file['TRCK'] = TRCK(encoding=3, text=tags['track'])
+            if 'genre' in tags and tags['genre']:
+                mp3_file['TCON'] = TCON(encoding=3, text=tags['genre'])
+                
+            # Advanced Tags setzen
+            if 'release_year' in tags and tags['release_year']:
+                mp3_file['TDRL'] = TDRL(encoding=3, text=tags['release_year'])
+            if 'rating' in tags and tags['rating']:
+                rating_value = int(float(tags['rating']) * 51) if str(tags['rating']).replace('.', '').isdigit() else 0
+                mp3_file['POPM'] = POPM(email="user@example.com", rating=rating_value, count=1)
+            if 'bpm' in tags and tags['bpm']:
+                mp3_file['TBPM'] = TBPM(encoding=3, text=tags['bpm'])
+            if 'energy' in tags and tags['energy']:
+                mp3_file['TXXX:ENERGY'] = TXXX(encoding=3, desc='ENERGY', text=tags['energy'])
+            if 'danceability' in tags and tags['danceability']:
+                mp3_file['TXXX:DANCEABILITY'] = TXXX(encoding=3, desc='DANCEABILITY', text=tags['danceability'])
+            if 'mood' in tags and tags['mood']:
+                mp3_file['TXXX:MOOD'] = TXXX(encoding=3, desc='MOOD', text=tags['mood'])
+            if 'similar_artist' in tags and tags['similar_artist']:
+                mp3_file['TXXX:SIMILAR_ARTIST'] = TXXX(encoding=3, desc='SIMILAR_ARTIST', text=tags['similar_artist'])
+            if 'comment' in tags and tags['comment']:
+                mp3_file['COMM::eng'] = COMM(encoding=3, lang='eng', desc='', text=tags['comment'])
+            if 'url' in tags and tags['url']:
+                mp3_file['TXXX:URL'] = TXXX(encoding=3, desc='URL', text=tags['url'])
+            if 'era' in tags and tags['era']:
+                mp3_file['TXXX:ERA'] = TXXX(encoding=3, desc='ERA', text=tags['era'])
+            if 'style' in tags and tags['style']:
+                mp3_file['TXXX:STYLE'] = TXXX(encoding=3, desc='STYLE', text=tags['style'])
+            if 'energy_level' in tags and tags['energy_level']:
+                mp3_file['TXXX:ENERGY_LEVEL'] = TXXX(encoding=3, desc='ENERGY_LEVEL', text=tags['energy_level'])
+            if 'lyrics' in tags and tags['lyrics']:
+                mp3_file['USLT::eng'] = USLT(encoding=3, lang='eng', desc='', text=tags['lyrics'])
+            
+            # Datei speichern
+            mp3_file.save()
+            return True
+            
+        except Exception as e:
+            print(f"Fehler beim Schreiben der ID3-Tags für {file_path}: {e}")
+            return False
         
     def process_directory(self, directory_path):
         """

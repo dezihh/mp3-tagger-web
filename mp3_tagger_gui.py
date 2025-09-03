@@ -227,7 +227,8 @@ class MP3TaggerGUI:
         metadata_buttons.pack(fill=tk.X, pady=(2, 0))
         
         ttk.Button(metadata_buttons, text="Last.fm", command=self.enrich_with_lastfm, width=10).pack(side=tk.LEFT, padx=(0, 5))
-        ttk.Button(metadata_buttons, text="MusicBrainz", command=self.enrich_with_musicbrainz, width=12).pack(side=tk.LEFT)
+        ttk.Button(metadata_buttons, text="MusicBrainz", command=self.enrich_with_musicbrainz, width=12).pack(side=tk.LEFT, padx=(0, 5))
+        ttk.Button(metadata_buttons, text="Discogs", command=self.enrich_with_discogs, width=10).pack(side=tk.LEFT)
         
         # Batch-Aktionen Bereich
         batch_frame = ttk.Frame(function_frame)
@@ -1025,7 +1026,17 @@ class MP3TaggerGUI:
     
     
     def get_original_advanced_metadata_value(self, file_path, field):
-        """Holt den ursprünglichen Advanced-Metadaten-Wert aus der Datei"""
+        """Holt den ursprünglichen Advanced-Metadaten-Wert aus der Datei oder aus angereicherten Daten"""
+        # Erst aus angereicherten Daten schauen (falls vorhanden)
+        if hasattr(self, 'files_data') and self.files_data:
+            for file_data in self.files_data:
+                if file_data.get('path') == file_path:
+                    # Aus angereicherten advanced_tags lesen
+                    if 'advanced_tags' in file_data and field in file_data['advanced_tags']:
+                        return file_data['advanced_tags'][field]
+                    break
+        
+        # Fallback: Aus ID3-Tags der Datei lesen
         try:
             from mutagen.mp3 import MP3
             mp3_file = MP3(file_path)
@@ -1035,6 +1046,7 @@ class MP3TaggerGUI:
                 'release_year': 'TDRL',  # Release Date
                 'rating': 'POPM',        # Popularimeter (vereinfacht)
                 'bpm': 'TBPM',           # BPM
+                'tempo': 'TBPM',         # Alias für BPM
                 'energy': 'TXXX:ENERGY',
                 'danceability': 'TXXX:DANCEABILITY',
                 'mood': 'TXXX:MOOD',
@@ -1068,14 +1080,15 @@ class MP3TaggerGUI:
                     # Lyrics
                     if tag_name in mp3_file:
                         return str(mp3_file[tag_name].text)
-                else:
-                    # Standard Tag
-                    if tag_name in mp3_file:
-                        return str(mp3_file[tag_name].text[0])
-            return ""
-        except:
-            return ""
-    
+                elif tag_name in mp3_file:
+                    # Standard Tags
+                    return str(mp3_file[tag_name].text[0])
+                        
+        except Exception as e:
+            print(f"Fehler beim Lesen der Advanced Metadata: {e}")
+        
+        return ""
+
     def get_original_metadata_value(self, file_path, field):
         """Holt den ursprünglichen Metadaten-Wert aus der Datei"""
         try:
@@ -1518,7 +1531,7 @@ class MP3TaggerGUI:
             # Verzeichnis-Knoten erstellen
             dir_item = self.files_tree.insert('', 'end', 
                 text=f"📁 {dir_name} ({len(files)} Dateien)",
-                values=('', '', '', '', '', '', '', '', ''),
+                values=('', '', '', '', '', ''),
                 tags=('directory',))
             
             # Dateien unter Verzeichnis-Knoten einfügen
@@ -1553,7 +1566,6 @@ class MP3TaggerGUI:
                 item_id = self.files_tree.insert(dir_item, 'end',
                     text=display_name,  # Dateiname mit optionalem Cover-Symbol
                     values=(
-                        '',  # Versteckte filename-Spalte (steht jetzt in text)
                         file_data.get('title', ''),
                         file_data.get('artist', ''),
                         file_data.get('album', ''),
@@ -1578,6 +1590,7 @@ class MP3TaggerGUI:
         # Tags für visuelle Unterscheidung konfigurieren (vereinfacht)
         self.files_tree.tag_configure('directory', background='#f0f0f0', font=('Arial', 9, 'bold'), foreground='black')
         self.files_tree.tag_configure('file', background='white', foreground='black', font=('Arial', 9))
+        self.files_tree.tag_configure('selected', background='#e6f3ff', foreground='black', font=('Arial', 9, 'bold'))
         
         # ENTFERNT: Verwirrende 'selected' Tags - wir nutzen die Standard TreeView Auswahl
         print("🎨 Tags konfiguriert - Standard TreeView Auswahl")
@@ -1611,27 +1624,7 @@ class MP3TaggerGUI:
             print(f"🔵 Datei gewählt: {self.files_tree.item(item, 'text')}")
         
         self.update_selection_status()
-        """Schaltet die Auswahl einer Datei um"""
-        # Ermittle welche Zeile geklickt wurde
-        item = self.files_tree.identify_row(event.y)
-        if not item:
-            return
-            
-        # Ermittle welche Spalte geklickt wurde
-        column = self.files_tree.identify_column(event.x)
-        
-        # Nur bei Klick auf die erste Spalte (Checkbox) reagieren
-        if column == '#1':  # #1 ist die erste Spalte (select)
-            # Checkbox umschalten
-            values = list(self.files_tree.item(item, 'values'))
-            if values[0] == '☐':
-                values[0] = '☑'
-                if item not in self.selected_files:
-                    self.selected_files.append(item)
-            else:
-                values[0] = '☐'
-                if item in self.selected_files:
-                    self.selected_files.remove(item)
+
     def select_all_files(self):
         """Wählt alle Dateien aus"""
         self.selected_items.clear()
@@ -1769,7 +1762,6 @@ class MP3TaggerGUI:
                 
             # Aktualisiere die Werte direkt über item_id
             self.files_tree.item(item_id, values=(
-                '',  # Versteckte filename-Spalte
                 file_data.get('title', ''),
                 file_data.get('artist', ''),
                 file_data.get('album', ''),
@@ -2184,6 +2176,27 @@ class MP3TaggerGUI:
         # Threading für Metadaten-Anreicherung
         threading.Thread(target=self._enrich_metadata_worker, args=(selected, 'musicbrainz'), daemon=True).start()
     
+    def enrich_with_discogs(self):
+        """Metadaten-Anreicherung mit Discogs für ausgewählte Dateien"""
+        selected = self.get_selected_files()
+        if not selected:
+            messagebox.showwarning("Warnung", "Bitte wählen Sie mindestens eine Datei aus.")
+            return
+            
+        # Extended Metadata Service initialisieren wenn nötig
+        if not self.extended_metadata:
+            self.extended_metadata = ExtendedMetadataService()
+            
+            # Prüfe ob Discogs Service verfügbar ist
+            if not self.extended_metadata.discogs:
+                messagebox.showerror("Fehler", "Discogs API-Token nicht konfiguriert. Bitte DISCOGS_API in config.env eintragen.")
+                return
+        
+        self.status_var.set("Starte Discogs-Anreicherung...")
+        
+        # Threading für Metadaten-Anreicherung
+        threading.Thread(target=self._enrich_metadata_worker, args=(selected, 'discogs'), daemon=True).start()
+    
     def recognize_album(self):
         """Startet Album-Erkennung für ausgewählte Dateien"""
         selected = self.get_selected_files()
@@ -2231,9 +2244,18 @@ class MP3TaggerGUI:
                 )
                 
                 if enriched_metadata:
-                    # Metadaten aktualisieren
+                    file_path = file_data.get('path')
+                    
+                    # Grunddaten aktualisieren und in pending_changes speichern
                     if enriched_metadata.genres and not file_data.get('genre'):
-                        file_data['genre'] = ', '.join(enriched_metadata.genres[:3])  # Erste 3 Genres
+                        new_genre = ', '.join(enriched_metadata.genres[:3])  # Erste 3 Genres
+                        file_data['genre'] = new_genre
+                        
+                        # In pending_changes speichern
+                        if file_path not in self.pending_changes:
+                            self.pending_changes[file_path] = {}
+                        self.pending_changes[file_path]['genre'] = new_genre
+                        print(f"📋 Genre gesetzt und vorgemerkt: {new_genre}")
                     
                     if enriched_metadata.release_date and not file_data.get('year'):
                         # Jahr aus release_date extrahieren
@@ -2241,8 +2263,144 @@ class MP3TaggerGUI:
                             year = enriched_metadata.release_date.split('-')[0]
                             if year.isdigit():
                                 file_data['year'] = year
+                                
+                                # In pending_changes speichern
+                                if file_path not in self.pending_changes:
+                                    self.pending_changes[file_path] = {}
+                                self.pending_changes[file_path]['year'] = year
+                                print(f"📅 Jahr gesetzt und vorgemerkt: {year}")
                         except:
                             pass
+                    
+                    # Advanced Tags aktualisieren
+                    advanced_data = {}
+                    
+                    # Mood
+                    if enriched_metadata.mood:
+                        advanced_data['mood'] = ', '.join(enriched_metadata.mood[:2])  # Erste 2 Moods
+                    
+                    # Audio Features
+                    if enriched_metadata.audio_features:
+                        af = enriched_metadata.audio_features
+                        
+                        # BPM/Tempo
+                        if af.tempo and af.tempo > 0:
+                            advanced_data['tempo'] = str(int(af.tempo))
+                        
+                        # Energy Level (0.0-1.0 → 1-10)
+                        if af.energy is not None:
+                            advanced_data['energy_level'] = str(int(af.energy * 10))
+                        
+                        # Danceability (0.0-1.0 → 1-10)
+                        if af.danceability is not None:
+                            advanced_data['danceability'] = str(int(af.danceability * 10))
+                    
+                    # Similar Artists
+                    if enriched_metadata.similar_artists:
+                        advanced_data['similar_artist'] = ', '.join(enriched_metadata.similar_artists[:3])
+                        print(f"📋 Similar Artists gesetzt: {advanced_data['similar_artist']}")
+                    
+                    # Tags als Style verwenden
+                    if enriched_metadata.tags:
+                        # Filtere relevante Style-Tags
+                        style_tags = [tag for tag in enriched_metadata.tags[:5] if len(tag) > 2]
+                        if style_tags:
+                            advanced_data['style'] = ', '.join(style_tags)
+                            print(f"🎨 Style gesetzt: {advanced_data['style']}")
+                            
+                            # Mood aus Style-Tags ableiten
+                            mood_mapping = {
+                                'dance': 'Energetic',
+                                'disco': 'Fun',
+                                'pop': 'Upbeat',
+                                'rock': 'Energetic', 
+                                'ballad': 'Romantic',
+                                'blues': 'Melancholic',
+                                'jazz': 'Smooth',
+                                'classical': 'Peaceful',
+                                'electronic': 'Energetic',
+                                'chill': 'Relaxed',
+                                'ambient': 'Peaceful',
+                                'sad': 'Melancholic',
+                                'happy': 'Joyful',
+                                'love': 'Romantic'
+                            }
+                            
+                            # Suche nach Mood-Hinweisen in den Tags
+                            detected_moods = []
+                            for tag in style_tags:
+                                tag_lower = tag.lower()
+                                for keyword, mood in mood_mapping.items():
+                                    if keyword in tag_lower and mood not in detected_moods:
+                                        detected_moods.append(mood)
+                            
+                            if detected_moods:
+                                advanced_data['mood'] = ', '.join(detected_moods[:2])  # Max 2 Moods
+                                print(f"🎭 Mood abgeleitet: {advanced_data['mood']}")
+                    
+                    # Release Date als Erscheinungsjahr
+                    if enriched_metadata.release_date:
+                        try:
+                            # Jahr aus verschiedenen Datumsformaten extrahieren
+                            release_date = enriched_metadata.release_date
+                            if release_date:
+                                # Versuche verschiedene Formate
+                                import re
+                                year_match = re.search(r'(\d{4})', release_date)
+                                if year_match:
+                                    year = year_match.group(1)
+                                    advanced_data['release_year'] = year
+                                    print(f"📅 Release Year gesetzt: {advanced_data['release_year']}")
+                                    
+                                    # Era aus Jahr ableiten
+                                    try:
+                                        year_int = int(year)
+                                        if year_int >= 2020:
+                                            era = "2020s"
+                                        elif year_int >= 2010:
+                                            era = "2010s"
+                                        elif year_int >= 2000:
+                                            era = "2000s"
+                                        elif year_int >= 1990:
+                                            era = "1990s"
+                                        elif year_int >= 1980:
+                                            era = "1980s"
+                                        elif year_int >= 1970:
+                                            era = "1970s"
+                                        elif year_int >= 1960:
+                                            era = "1960s"
+                                        else:
+                                            era = f"{year_int//10*10}s"
+                                        
+                                        advanced_data['era'] = era
+                                        print(f"🕰️ Era abgeleitet: {era}")
+                                    except:
+                                        pass
+                        except Exception as e:
+                            print(f"⚠️ Fehler bei Release Date: {e}")
+                    
+                    # Debug: Zeige alle advanced_data
+                    print(f"🔍 Advanced Data für {file_data.get('filename', 'Unknown')}: {advanced_data}")
+                    
+                    # Advanced Tags in die file_data integrieren
+                    if advanced_data:
+                        if 'advanced_tags' not in file_data:
+                            file_data['advanced_tags'] = {}
+                        file_data['advanced_tags'].update(advanced_data)
+                        
+                        # GUI IMMER aktualisieren, wenn Advanced Tags empfangen werden
+                        print(f"🔄 Aktualisiere GUI für Advanced Tags: {advanced_data}")
+                        self.root.after(0, lambda ad=advanced_data, fd=file_data: self._update_advanced_tags_in_gui(ad, fd))
+                        
+                        # Zusätzlich prüfen ob es die aktuell ausgewählte Datei ist
+                        current_selection = self.get_current_file_selection()
+                        print(f"🔍 Current Selection: {current_selection.get('path') if current_selection else 'None'}")
+                        print(f"🔍 File Data Path: {file_data.get('path')}")
+                        
+                        if current_selection and current_selection.get('path') == file_data.get('path'):
+                            print(f"✅ Pfade stimmen überein - ist aktuell ausgewählte Datei")
+                        else:
+                            print(f"ℹ️ Pfade stimmen nicht überein - andere Datei angereichert")
                     
                     # UI aktualisieren
                     self.root.after(0, lambda: self._update_file_in_table(file_data))
@@ -2611,6 +2769,105 @@ class MP3TaggerGUI:
         finally:
             self.root.destroy()
 
+    def get_current_file_selection(self):
+        """Gibt die aktuell in der GUI angezeigten Datei-Daten zurück"""
+        print(f"🔍 get_current_file_selection: current_file_path = {getattr(self, 'current_file_path', 'NOT_SET')}")
+        
+        if not hasattr(self, 'current_file_path') or not self.current_file_path:
+            print(f"🔍 Kein current_file_path gesetzt")
+            return None
+        
+        # Suche die file_data für den aktuellen Pfad
+        if hasattr(self, 'files_data') and self.files_data:
+            print(f"🔍 Durchsuche {len(self.files_data)} files_data Einträge")
+            for i, file_data in enumerate(self.files_data):
+                file_path = file_data.get('path')
+                print(f"🔍 [{i}] Vergleiche:\n    Current: '{self.current_file_path}'\n    Data:    '{file_path}'\n    Equal: {file_path == self.current_file_path}")
+                if file_path == self.current_file_path:
+                    print(f"🔍 Gefunden: {file_data.get('filename', 'Unknown')}")
+                    return file_data
+        else:
+            print(f"🔍 Keine files_data verfügbar")
+        
+        print(f"🔍 Keine passende file_data gefunden")
+        return None
+    
+    def _update_advanced_tags_in_gui(self, advanced_data, file_data=None):
+        """Aktualisiert die Advanced Tags in der GUI mit angereicherten Daten"""
+        try:
+            print(f"🔄 GUI Update für Advanced Tags: {advanced_data}")
+            print(f"🔄 Für Datei: {file_data.get('filename') if file_data else 'Unknown'}")
+            
+            # Prüfe ob die Datei gerade ausgewählt ist
+            current_selection = self.get_current_file_selection()
+            if file_data and current_selection and current_selection.get('path') != file_data.get('path'):
+                print(f"ℹ️ Datei {file_data.get('filename')} ist nicht aktuell ausgewählt - GUI-Update übersprungen")
+                return
+                
+            print(f"✅ Aktualisiere GUI für aktuell ausgewählte Datei")
+            
+            # Mapping von internen Namen zu GUI-Variablen
+            gui_mapping = {
+                'mood': self.metadata_mood,
+                'danceability': self.metadata_danceability,
+                'energy': self.metadata_energy,  # Energy hinzugefügt
+                'energy_level': self.metadata_energy_level,
+                'tempo': self.metadata_bpm,  # BPM wird als tempo geliefert
+                'bpm': self.metadata_bpm,    # Direktes BPM Mapping
+                'similar_artist': self.metadata_similar_artist,
+                'style': self.metadata_style,
+                'url': self.metadata_url,
+                'era': self.metadata_era,
+                'release_year': self.metadata_release_year,
+                'rating': self.metadata_rating,  # Rating hinzugefügt
+                'comment': self.metadata_comment,  # Comment hinzugefügt
+                'lyrics': self.metadata_lyrics  # Lyrics hinzugefügt
+            }
+            
+            # Mapping von internen Namen zu pending_changes Keys
+            pending_mapping = {
+                'mood': 'mood',
+                'danceability': 'danceability',
+                'energy': 'energy',  # Energy hinzugefügt
+                'energy_level': 'energy_level',
+                'tempo': 'bpm',  # BPM als tempo geliefert, aber als 'bpm' gespeichert
+                'bpm': 'bpm',    # Direktes BPM Mapping
+                'similar_artist': 'similar_artist',
+                'style': 'style',
+                'url': 'url',
+                'era': 'era',
+                'release_year': 'release_year',
+                'rating': 'rating',  # Rating hinzugefügt
+                'comment': 'comment',  # Comment hinzugefügt
+                'lyrics': 'lyrics'  # Lyrics hinzugefügt
+            }
+            
+            # Pfad für pending_changes bestimmen
+            file_path = None
+            if file_data:
+                file_path = file_data.get('filepath') or file_data.get('path')  # Unterstütze beide Keys
+            elif hasattr(self, 'current_file_path'):
+                file_path = self.current_file_path
+                
+            # Advanced Tags setzen
+            for field, value in advanced_data.items():
+                if field in gui_mapping and value:
+                    # GUI aktualisieren
+                    gui_mapping[field].set(str(value))
+                    print(f"✅ Advanced Tag gesetzt: {field} = {value}")
+                    
+                    # Pending changes aktualisieren (für Speichern)
+                    if file_path and field in pending_mapping:
+                        if file_path not in self.pending_changes:
+                            self.pending_changes[file_path] = {}
+                        self.pending_changes[file_path][pending_mapping[field]] = str(value)
+                        print(f"💾 Pending change gesetzt: {pending_mapping[field]} = {value}")
+                        
+                elif field not in gui_mapping:
+                    print(f"⚠️ Unmapped field: {field} = {value}")
+                    
+        except Exception as e:
+            print(f"❌ Fehler beim Aktualisieren der Advanced Tags in GUI: {e}")
 
 
 class CoverSelectionDialog:
@@ -2762,7 +3019,6 @@ class CoverSelectionDialog:
         """Zeigt den Dialog und wartet auf Ergebnis"""
         self.dialog.wait_window()
         return self.result
-
 
 def main():
     """Hauptfunktion"""

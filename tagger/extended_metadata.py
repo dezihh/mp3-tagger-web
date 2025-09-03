@@ -29,12 +29,21 @@ import asyncio
 import aiohttp
 import logging
 import base64
+import time
 from typing import Dict, List, Optional, Any, Tuple
 from dataclasses import dataclass, field
 from datetime import datetime
 
 # Logging-Setup
 logger = logging.getLogger(__name__)
+
+# Discogs Client Import
+try:
+    import discogs_client
+    DISCOGS_AVAILABLE = True
+except ImportError:
+    DISCOGS_AVAILABLE = False
+    logger.warning("discogs-client nicht verfügbar. pip install discogs-client für Discogs-Support.")
 
 
 @dataclass
@@ -227,6 +236,117 @@ class SpotifyService:
         return None
 
 
+class DiscogsService:
+    """Discogs API Service für Release-Informationen und erweiterte Metadaten"""
+    
+    def __init__(self, token: str):
+        self.token = token
+        self.client = None
+        self.last_request_time = 0
+        self.min_delay = 1.0  # Mindestens 1 Sekunde zwischen Requests
+        self._setup_client()
+    
+    def _setup_client(self):
+        """Initialisiert den Discogs Client"""
+        if not DISCOGS_AVAILABLE:
+            logger.warning("Discogs Client nicht verfügbar")
+            return
+            
+        try:
+            self.client = discogs_client.Client('MP3Tagger/1.0', user_token=self.token)
+            logger.info("Discogs Client initialisiert")
+        except Exception as e:
+            logger.error(f"Discogs Client Setup-Fehler: {e}")
+    
+    def _wait_for_rate_limit(self):
+        """Implementiert Rate Limiting für Discogs API"""
+        current_time = time.time()
+        time_since_last = current_time - self.last_request_time
+        
+        if time_since_last < self.min_delay:
+            sleep_time = self.min_delay - time_since_last
+            time.sleep(sleep_time)
+        
+        self.last_request_time = time.time()
+    
+    async def get_release_info(self, artist: str, title: str, album: str = None) -> Optional[Dict]:
+        """Holt Release-Informationen von Discogs"""
+        if not self.client:
+            return None
+        
+        try:
+            # Rate limiting
+            await asyncio.get_event_loop().run_in_executor(None, self._wait_for_rate_limit)
+            
+            # Search String erstellen
+            search_terms = [artist, title]
+            if album:
+                search_terms.append(album)
+            query = " ".join(search_terms)
+            
+            # Discogs Suche (in Thread-Executor ausführen, da synchron)
+            logger.info(f"Discogs Suche: {query}")
+            search_results = await asyncio.get_event_loop().run_in_executor(
+                None, lambda: self.client.search(query, type='release')
+            )
+            
+            if not search_results:
+                return None
+            
+            # Bestes Ergebnis auswählen (erstes Ergebnis)
+            best_result = search_results[0]
+            
+            # Detaillierte Release-Informationen abrufen (auch in Thread-Executor)
+            release = await asyncio.get_event_loop().run_in_executor(
+                None, lambda: self.client.release(best_result.id)
+            )
+            
+            # Release-Daten extrahieren
+            release_data = {
+                'title': release.title,
+                'artists': [artist.name for artist in release.artists],
+                'year': getattr(release, 'year', None),
+                'released': getattr(release, 'released', None),
+                'genres': getattr(release, 'genres', []),
+                'styles': getattr(release, 'styles', []),
+                'tracklist': [
+                    {
+                        'position': track.position,
+                        'title': track.title,
+                        'duration': getattr(track, 'duration', None)
+                    }
+                    for track in getattr(release, 'tracklist', [])
+                ],
+                'images': [
+                    {
+                        'type': img['type'],
+                        'uri': img['uri'],
+                        'width': img.get('width'),
+                        'height': img.get('height')
+                    }
+                    for img in getattr(release, 'images', [])
+                ],
+                'labels': [
+                    {
+                        'name': label.name,
+                        'catno': getattr(label, 'catno', None)
+                    }
+                    for label in getattr(release, 'labels', [])
+                ],
+                'notes': getattr(release, 'notes', None),
+                'country': getattr(release, 'country', None),
+                'discogs_id': release.id,
+                'discogs_url': f"https://www.discogs.com/release/{release.id}"
+            }
+            
+            logger.info(f"Discogs Release gefunden: {release.title} ({release_data['year']})")
+            return release_data
+            
+        except Exception as e:
+            logger.error(f"Discogs API Fehler: {e}")
+            return None
+
+
 class LastFmExtendedService:
     """Erweiterte Last.fm API für Metadaten"""
     
@@ -309,12 +429,14 @@ class ExtendedMetadataService:
         self.lastfm_key = os.getenv('LASTFM_API_KEY')
         self.spotify_client_id = os.getenv('SPOTIFY_CLIENT_ID')
         self.spotify_client_secret = os.getenv('SPOTIFY_CLIENT_SECRET')
+        self.discogs_token = os.getenv('DISCOGS_API')
         
         # Services initialisieren
         self.lastfm = LastFmExtendedService(self.lastfm_key) if self.lastfm_key else None
         self.spotify = SpotifyService(
             self.spotify_client_id, self.spotify_client_secret
         ) if self.spotify_client_id and self.spotify_client_secret else None
+        self.discogs = DiscogsService(self.discogs_token) if self.discogs_token else None
         
         # Cache für API-Anfragen
         self.cache = {}
@@ -364,6 +486,9 @@ class ExtendedMetadataService:
             
         if self.spotify:
             tasks.append(self._collect_spotify_data(metadata, artist, title, album))
+            
+        if self.discogs:
+            tasks.append(self._collect_discogs_data(metadata, artist, title, album))
         
         if tasks:
             await asyncio.gather(*tasks, return_exceptions=True)
@@ -458,6 +583,59 @@ class ExtendedMetadataService:
                     
         except Exception as e:
             logger.error(f"Spotify Datensammlung-Fehler: {e}")
+
+    async def _collect_discogs_data(self, metadata: ExtendedMetadata, artist: str, title: str, album: str = None):
+        """Sammelt Daten von Discogs"""
+        try:
+            # Release-Informationen von Discogs holen
+            release_info = await self.discogs.get_release_info(artist, title, album)
+            if release_info:
+                metadata.sources_used.append('discogs')
+                
+                # Genres von Discogs
+                if release_info.get('genres'):
+                    for genre in release_info['genres']:
+                        if genre not in metadata.genres:
+                            metadata.genres.append(genre)
+                
+                # Styles als erweiterte Genres verwenden
+                if release_info.get('styles'):
+                    for style in release_info['styles']:
+                        if style not in metadata.extended_genres:
+                            metadata.extended_genres.append(style)
+                            # Style auch als Tag hinzufügen
+                            if style not in metadata.tags:
+                                metadata.tags.append(style)
+                
+                # Release-Datum von Discogs (höhere Priorität als andere Quellen)
+                if release_info.get('year'):
+                    metadata.release_date = str(release_info['year'])
+                elif release_info.get('released'):
+                    metadata.release_date = release_info['released']
+                
+                # Cover-Art von Discogs
+                if release_info.get('images'):
+                    for img in release_info['images']:
+                        if img['type'] == 'primary':
+                            metadata.cover_url = img['uri']
+                            # Width/Height speichern wenn verfügbar
+                            if img.get('width') and img.get('height'):
+                                size_key = f"{img['width']}x{img['height']}"
+                                metadata.cover_urls[size_key] = img['uri']
+                            break
+                
+                # Labels als zusätzliche Information
+                if release_info.get('labels'):
+                    label_names = [label['name'] for label in release_info['labels']]
+                    # Labels können auch als erweiterte Tags verwendet werden
+                    for label in label_names[:2]:  # Nur die ersten 2 Labels
+                        if label not in metadata.tags:
+                            metadata.tags.append(f"Label: {label}")
+                
+                logger.info(f"Discogs Daten gesammelt: {len(release_info.get('genres', []))} Genres, {len(release_info.get('styles', []))} Styles")
+                
+        except Exception as e:
+            logger.error(f"Discogs Datensammlung-Fehler: {e}")
 
 
 def create_extended_metadata_service() -> ExtendedMetadataService:
