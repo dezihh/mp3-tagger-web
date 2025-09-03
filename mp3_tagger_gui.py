@@ -119,16 +119,18 @@ class MP3TaggerGUI:
         self.audio_player_widget = AudioPlayerWidget(parent)
         
     def create_main_content(self, parent):
-        """Erstellt den Hauptinhalt mit integrierter Funktionalität und Metadaten-Panel"""
+        """Erstellt den Hauptinhalt mit verschiebarer Trennlinie zwischen Tabelle und Metadaten"""
         content_frame = ttk.Frame(parent)
-        content_frame.grid(row=3, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))  # Angepasst für Audio-Player
-        content_frame.columnconfigure(0, weight=3)  # Hauptbereich (Tabelle) bekommt mehr Platz
-        content_frame.columnconfigure(1, weight=1)  # Metadaten-Panel bekommt weniger Platz
-        content_frame.rowconfigure(2, weight=1)
+        content_frame.grid(row=3, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        content_frame.columnconfigure(0, weight=1)
+        content_frame.rowconfigure(0, weight=1)
+        
+        # PanedWindow für verschiebbare Trennlinie
+        self.main_paned = ttk.PanedWindow(content_frame, orient=tk.HORIZONTAL)
+        self.main_paned.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
         
         # Linker Bereich: Funktionen und Tabelle
-        left_frame = ttk.Frame(content_frame)
-        left_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), padx=(0, 5))
+        left_frame = ttk.Frame(self.main_paned)
         left_frame.columnconfigure(0, weight=1)
         left_frame.rowconfigure(2, weight=1)
         
@@ -142,8 +144,7 @@ class MP3TaggerGUI:
         self.create_files_table(left_frame)
         
         # Rechter Bereich: Metadaten-Panel mit Scrollbar
-        metadata_container = ttk.Frame(content_frame)
-        metadata_container.grid(row=0, column=1, rowspan=3, sticky=(tk.N, tk.S, tk.E, tk.W), padx=(10, 0))
+        metadata_container = ttk.Frame(self.main_paned)
         metadata_container.rowconfigure(0, weight=1)
         metadata_container.columnconfigure(0, weight=1)
         
@@ -174,6 +175,10 @@ class MP3TaggerGUI:
         
         # Metadaten-Panel erstellen (jetzt im scrollbaren Frame)
         self.create_metadata_panel(self.metadata_scrollable_frame)
+        
+        # Panels zu PanedWindow hinzufügen
+        self.main_paned.add(left_frame, weight=3)  # Tabelle bekommt mehr Platz
+        self.main_paned.add(metadata_container, weight=1)  # Metadaten-Panel bekommt weniger Platz
 
     def create_function_toolbar(self, parent):
         """Erstellt die Funktions-Toolbar mit allen Hauptfunktionen"""
@@ -257,13 +262,12 @@ class MP3TaggerGUI:
         table_frame.columnconfigure(0, weight=1)
         table_frame.rowconfigure(0, weight=1)
         
-        # Treeview für Dateien (ohne Cover/Status-Spalten, da diese im Metadaten-Panel sind)
-        columns = ('filename', 'title', 'artist', 'album', 'year', 'track', 'genre')
+        # Treeview für Dateien (ohne filename-Spalte)
+        columns = ('title', 'artist', 'album', 'year', 'track', 'genre')
         self.files_tree = ttk.Treeview(table_frame, columns=columns, show='tree headings', height=20)
         
         # Spalten konfigurieren
         self.files_tree.heading('#0', text='Verzeichnis/Datei')  # Tree-Spalte für Verzeichnisse
-        self.files_tree.heading('filename', text='Dateiname')
         self.files_tree.heading('title', text='Titel')
         self.files_tree.heading('artist', text='Künstler')
         self.files_tree.heading('album', text='Album')
@@ -271,9 +275,8 @@ class MP3TaggerGUI:
         self.files_tree.heading('track', text='Track')
         self.files_tree.heading('genre', text='Genre')
         
-        # Spaltenbreiten (mehr Platz für Metadaten-Spalten)
+        # Spaltenbreiten (ohne filename-Spalte)
         self.files_tree.column('#0', width=250, minwidth=200)  # Tree-Spalte für Verzeichnis/Datei
-        self.files_tree.column('filename', width=0, minwidth=0)  # Versteckt, da in Tree-Spalte
         self.files_tree.column('title', width=200, minwidth=150)  # Mehr Platz
         self.files_tree.column('artist', width=150, minwidth=120)  # Mehr Platz
         self.files_tree.column('album', width=150, minwidth=120)  # Mehr Platz
@@ -318,66 +321,72 @@ class MP3TaggerGUI:
         metadata_frame.pack(fill='both', expand=True)
         metadata_frame.columnconfigure(1, weight=1)
         
-        # Datei-Info Bereich
+        # Datei-Info Bereich (mit Rahmen)
         file_info_frame = ttk.LabelFrame(metadata_frame, text="📁 Datei-Information", padding=8)
-        file_info_frame.grid(row=0, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(0, 10))
+        file_info_frame.grid(row=0, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(0, 5))
         file_info_frame.columnconfigure(1, weight=1)
+        file_info_frame.columnconfigure(3, weight=1)
+        file_info_frame.columnconfigure(5, weight=1)
         
-        # Dateiname
-        ttk.Label(file_info_frame, text="Datei:", font=('Arial', 9, 'bold')).grid(row=0, column=0, sticky=tk.W, pady=2)
+        # Dateiname (ganze Breite)
+        ttk.Label(file_info_frame, text="📁", font=('Arial', 10)).grid(row=0, column=0, sticky=tk.W, pady=2)
         self.metadata_filename = tk.StringVar(value="Keine Datei ausgewählt")
         filename_label = ttk.Label(file_info_frame, textvariable=self.metadata_filename, 
-                                  foreground='gray', font=('Arial', 9))
-        filename_label.grid(row=0, column=1, sticky=(tk.W, tk.E), pady=2, padx=(10, 0))
+                                  foreground='gray', font=('Arial', 9, 'bold'))
+        filename_label.grid(row=0, column=1, columnspan=5, sticky=(tk.W, tk.E), pady=2, padx=(5, 0))
         
-        # Dateigröße und Dauer
-        ttk.Label(file_info_frame, text="Größe:", font=('Arial', 9, 'bold')).grid(row=1, column=0, sticky=tk.W, pady=2)
+        # Größe, Dauer und Bitrate nebeneinander
+        ttk.Label(file_info_frame, text="💾", font=('Arial', 9)).grid(row=1, column=0, sticky=tk.W, pady=2)
         self.metadata_filesize = tk.StringVar(value="-")
-        ttk.Label(file_info_frame, textvariable=self.metadata_filesize).grid(row=1, column=1, sticky=tk.W, pady=2, padx=(10, 0))
+        ttk.Label(file_info_frame, textvariable=self.metadata_filesize, font=('Arial', 8)).grid(row=1, column=1, sticky=tk.W, pady=2, padx=(5, 10))
         
-        ttk.Label(file_info_frame, text="Dauer:", font=('Arial', 9, 'bold')).grid(row=2, column=0, sticky=tk.W, pady=2)
+        ttk.Label(file_info_frame, text="⏱️", font=('Arial', 9)).grid(row=1, column=2, sticky=tk.W, pady=2)
         self.metadata_duration = tk.StringVar(value="-")
-        ttk.Label(file_info_frame, textvariable=self.metadata_duration).grid(row=2, column=1, sticky=tk.W, pady=2, padx=(10, 0))
+        ttk.Label(file_info_frame, textvariable=self.metadata_duration, font=('Arial', 8)).grid(row=1, column=3, sticky=tk.W, pady=2, padx=(5, 10))
+        
+        ttk.Label(file_info_frame, text="🎵", font=('Arial', 9)).grid(row=1, column=4, sticky=tk.W, pady=2)
+        self.metadata_bitrate = tk.StringVar(value="-")
+        ttk.Label(file_info_frame, textvariable=self.metadata_bitrate, font=('Arial', 8)).grid(row=1, column=5, sticky=tk.W, pady=2, padx=(5, 0))
         
         # Metadaten Bereich (editierbar)
-        meta_frame = ttk.LabelFrame(metadata_frame, text="🏷️ Tags (editierbar)", padding=8)
-        meta_frame.grid(row=1, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(0, 10))
+        meta_frame = ttk.LabelFrame(metadata_frame, text="🏷️ ID3 Tags (editierbar)", padding=8)
+        meta_frame.grid(row=1, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(0, 5))
         meta_frame.columnconfigure(1, weight=1)
         
-        # Titel
-        ttk.Label(meta_frame, text="Titel:", font=('Arial', 9, 'bold')).grid(row=0, column=0, sticky=tk.W, pady=3)
+        # Track (jetzt zuerst)
+        ttk.Label(meta_frame, text="Track:", font=('Arial', 9, 'bold')).grid(row=0, column=0, sticky=tk.W, pady=3)
+        self.metadata_track = tk.StringVar(value="-")
+        self.track_entry = ttk.Entry(meta_frame, textvariable=self.metadata_track, font=('Arial', 9), width=8)
+        self.track_entry.grid(row=0, column=1, sticky=tk.W, pady=3, padx=(10, 0))
+        self.track_entry.bind('<KeyRelease>', lambda e: self.on_metadata_change('track'))
+        
+        # Titel (jetzt nach Track)
+        ttk.Label(meta_frame, text="Titel:", font=('Arial', 9, 'bold')).grid(row=1, column=0, sticky=tk.W, pady=3)
         self.metadata_title = tk.StringVar(value="-")
         self.title_entry = ttk.Entry(meta_frame, textvariable=self.metadata_title, font=('Arial', 9))
-        self.title_entry.grid(row=0, column=1, sticky=(tk.W, tk.E), pady=3, padx=(10, 0))
+        self.title_entry.grid(row=1, column=1, sticky=(tk.W, tk.E), pady=3, padx=(10, 0))
         self.title_entry.bind('<KeyRelease>', lambda e: self.on_metadata_change('title'))
         
         # Künstler
-        ttk.Label(meta_frame, text="Künstler:", font=('Arial', 9, 'bold')).grid(row=1, column=0, sticky=tk.W, pady=3)
+        ttk.Label(meta_frame, text="Künstler:", font=('Arial', 9, 'bold')).grid(row=2, column=0, sticky=tk.W, pady=3)
         self.metadata_artist = tk.StringVar(value="-")
         self.artist_entry = ttk.Entry(meta_frame, textvariable=self.metadata_artist, font=('Arial', 9))
-        self.artist_entry.grid(row=1, column=1, sticky=(tk.W, tk.E), pady=3, padx=(10, 0))
+        self.artist_entry.grid(row=2, column=1, sticky=(tk.W, tk.E), pady=3, padx=(10, 0))
         self.artist_entry.bind('<KeyRelease>', lambda e: self.on_metadata_change('artist'))
         
         # Album
-        ttk.Label(meta_frame, text="Album:", font=('Arial', 9, 'bold')).grid(row=2, column=0, sticky=tk.W, pady=3)
+        ttk.Label(meta_frame, text="Album:", font=('Arial', 9, 'bold')).grid(row=3, column=0, sticky=tk.W, pady=3)
         self.metadata_album = tk.StringVar(value="-")
         self.album_entry = ttk.Entry(meta_frame, textvariable=self.metadata_album, font=('Arial', 9))
-        self.album_entry.grid(row=2, column=1, sticky=(tk.W, tk.E), pady=3, padx=(10, 0))
+        self.album_entry.grid(row=3, column=1, sticky=(tk.W, tk.E), pady=3, padx=(10, 0))
         self.album_entry.bind('<KeyRelease>', lambda e: self.on_metadata_change('album'))
         
         # Jahr
-        ttk.Label(meta_frame, text="Jahr:", font=('Arial', 9, 'bold')).grid(row=3, column=0, sticky=tk.W, pady=3)
+        ttk.Label(meta_frame, text="Jahr:", font=('Arial', 9, 'bold')).grid(row=4, column=0, sticky=tk.W, pady=3)
         self.metadata_year = tk.StringVar(value="-")
         self.year_entry = ttk.Entry(meta_frame, textvariable=self.metadata_year, font=('Arial', 9), width=8)
-        self.year_entry.grid(row=3, column=1, sticky=tk.W, pady=3, padx=(10, 0))
+        self.year_entry.grid(row=4, column=1, sticky=tk.W, pady=3, padx=(10, 0))
         self.year_entry.bind('<KeyRelease>', lambda e: self.on_metadata_change('year'))
-        
-        # Track
-        ttk.Label(meta_frame, text="Track:", font=('Arial', 9, 'bold')).grid(row=4, column=0, sticky=tk.W, pady=3)
-        self.metadata_track = tk.StringVar(value="-")
-        self.track_entry = ttk.Entry(meta_frame, textvariable=self.metadata_track, font=('Arial', 9), width=8)
-        self.track_entry.grid(row=4, column=1, sticky=tk.W, pady=3, padx=(10, 0))
-        self.track_entry.bind('<KeyRelease>', lambda e: self.on_metadata_change('track'))
         
         # Genre
         ttk.Label(meta_frame, text="Genre:", font=('Arial', 9, 'bold')).grid(row=5, column=0, sticky=tk.W, pady=3)
@@ -386,9 +395,131 @@ class MP3TaggerGUI:
         self.genre_entry.grid(row=5, column=1, sticky=(tk.W, tk.E), pady=3, padx=(10, 0))
         self.genre_entry.bind('<KeyRelease>', lambda e: self.on_metadata_change('genre'))
         
+        # Advanced Tags Bereich
+        advanced_frame = ttk.LabelFrame(metadata_frame, text="🔧 Advanced Tags", padding=8)
+        advanced_frame.grid(row=2, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(0, 5))
+        advanced_frame.columnconfigure(1, weight=1)
+        advanced_frame.columnconfigure(3, weight=1)  # Zusätzliche Spalte konfigurieren
+        
+        # Row 0: Erscheinungsjahr (TDRL) & Rating
+        ttk.Label(advanced_frame, text="Erscheinungsjahr:", font=('Arial', 8, 'bold')).grid(row=0, column=0, sticky=tk.W, pady=2)
+        self.metadata_release_year = tk.StringVar()
+        self.release_year_entry = ttk.Entry(advanced_frame, textvariable=self.metadata_release_year, font=('Arial', 8), width=8)
+        self.release_year_entry.grid(row=0, column=1, sticky=tk.W, pady=2, padx=(5, 8))
+        self.release_year_entry.bind('<KeyRelease>', lambda e: self.on_advanced_metadata_change('release_year'))
+        
+        ttk.Label(advanced_frame, text="Rating:", font=('Arial', 8, 'bold')).grid(row=0, column=2, sticky=tk.W, pady=2)
+        self.metadata_rating = tk.StringVar()
+        rating_frame = ttk.Frame(advanced_frame)
+        rating_frame.grid(row=0, column=3, sticky=tk.W, pady=2, padx=(5, 0))
+        self.rating_entry = ttk.Entry(rating_frame, textvariable=self.metadata_rating, font=('Arial', 8), width=4)
+        self.rating_entry.pack(side=tk.LEFT)
+        ttk.Label(rating_frame, text="/5⭐", font=('Arial', 8)).pack(side=tk.LEFT, padx=(2, 0))
+        self.rating_entry.bind('<KeyRelease>', lambda e: self.on_advanced_metadata_change('rating'))
+        
+        # Row 1: Tempo (BPM) & Energie
+        ttk.Label(advanced_frame, text="Tempo (BPM):", font=('Arial', 8, 'bold')).grid(row=1, column=0, sticky=tk.W, pady=2)
+        self.metadata_bpm = tk.StringVar()
+        self.bpm_entry = ttk.Entry(advanced_frame, textvariable=self.metadata_bpm, font=('Arial', 8), width=8)
+        self.bpm_entry.grid(row=1, column=1, sticky=tk.W, pady=2, padx=(5, 8))
+        self.bpm_entry.bind('<KeyRelease>', lambda e: self.on_advanced_metadata_change('bpm'))
+        
+        ttk.Label(advanced_frame, text="Energie:", font=('Arial', 8, 'bold')).grid(row=1, column=2, sticky=tk.W, pady=2)
+        self.metadata_energy = tk.StringVar()
+        energy_frame = ttk.Frame(advanced_frame)
+        energy_frame.grid(row=1, column=3, sticky=tk.W, pady=2, padx=(5, 0))
+        self.energy_entry = ttk.Entry(energy_frame, textvariable=self.metadata_energy, font=('Arial', 8), width=4)
+        self.energy_entry.pack(side=tk.LEFT)
+        ttk.Label(energy_frame, text="/10⚡", font=('Arial', 8)).pack(side=tk.LEFT, padx=(2, 0))
+        self.energy_entry.bind('<KeyRelease>', lambda e: self.on_advanced_metadata_change('energy'))
+        
+        # Row 2: Mood & Danceability (getauscht)
+        ttk.Label(advanced_frame, text="Mood:", font=('Arial', 8, 'bold')).grid(row=2, column=0, sticky=tk.W, pady=2)
+        self.metadata_mood = tk.StringVar()
+        self.mood_entry = ttk.Entry(advanced_frame, textvariable=self.metadata_mood, font=('Arial', 8), width=15)
+        self.mood_entry.grid(row=2, column=1, sticky=(tk.W, tk.E), pady=2, padx=(5, 8))
+        self.mood_entry.bind('<KeyRelease>', lambda e: self.on_advanced_metadata_change('mood'))
+        
+        ttk.Label(advanced_frame, text="Danceability:", font=('Arial', 8, 'bold')).grid(row=2, column=2, sticky=tk.W, pady=2)
+        self.metadata_danceability = tk.StringVar()
+        dance_frame = ttk.Frame(advanced_frame)
+        dance_frame.grid(row=2, column=3, sticky=tk.W, pady=2, padx=(5, 0))
+        self.danceability_entry = ttk.Entry(dance_frame, textvariable=self.metadata_danceability, font=('Arial', 8), width=4)
+        self.danceability_entry.pack(side=tk.LEFT)
+        ttk.Label(dance_frame, text="/10💃", font=('Arial', 8)).pack(side=tk.LEFT, padx=(2, 0))
+        self.danceability_entry.bind('<KeyRelease>', lambda e: self.on_advanced_metadata_change('danceability'))
+        
+        # Row 3: Era & Energy Level (getauscht) 
+        ttk.Label(advanced_frame, text="Era:", font=('Arial', 8, 'bold')).grid(row=3, column=0, sticky=tk.W, pady=2)
+        self.metadata_era = tk.StringVar()
+        self.era_entry = ttk.Entry(advanced_frame, textvariable=self.metadata_era, font=('Arial', 8), width=15)
+        self.era_entry.grid(row=3, column=1, sticky=(tk.W, tk.E), pady=2, padx=(5, 8))
+        self.era_entry.bind('<KeyRelease>', lambda e: self.on_advanced_metadata_change('era'))
+        
+        ttk.Label(advanced_frame, text="Energy Level:", font=('Arial', 8, 'bold')).grid(row=3, column=2, sticky=tk.W, pady=2)
+        self.metadata_energy_level = tk.StringVar()
+        energy_level_frame = ttk.Frame(advanced_frame)
+        energy_level_frame.grid(row=3, column=3, sticky=tk.W, pady=2, padx=(5, 0))
+        self.energy_level_entry = ttk.Entry(energy_level_frame, textvariable=self.metadata_energy_level, font=('Arial', 8), width=4)
+        self.energy_level_entry.pack(side=tk.LEFT)
+        ttk.Label(energy_level_frame, text="/10⚡", font=('Arial', 8)).pack(side=tk.LEFT, padx=(2, 0))
+        self.energy_level_entry.bind('<KeyRelease>', lambda e: self.on_advanced_metadata_change('energy_level'))
+        
+        # Row 4: URL (volle Breite)
+        ttk.Label(advanced_frame, text="URL:", font=('Arial', 8, 'bold')).grid(row=4, column=0, sticky=tk.W, pady=2)
+        self.metadata_url = tk.StringVar()
+        self.url_entry = ttk.Entry(advanced_frame, textvariable=self.metadata_url, font=('Arial', 8))
+        self.url_entry.grid(row=4, column=1, columnspan=3, sticky=(tk.W, tk.E), pady=2, padx=(5, 0))
+        self.url_entry.bind('<KeyRelease>', lambda e: self.on_advanced_metadata_change('url'))
+        
+        # Row 5: Style (volle Breite)
+        ttk.Label(advanced_frame, text="Style:", font=('Arial', 8, 'bold')).grid(row=5, column=0, sticky=tk.W, pady=2)
+        self.metadata_style = tk.StringVar()
+        self.style_entry = ttk.Entry(advanced_frame, textvariable=self.metadata_style, font=('Arial', 8))
+        self.style_entry.grid(row=5, column=1, columnspan=3, sticky=(tk.W, tk.E), pady=2, padx=(5, 0))
+        self.style_entry.bind('<KeyRelease>', lambda e: self.on_advanced_metadata_change('style'))
+        
+        # Row 6: Ähnlicher Künstler
+        ttk.Label(advanced_frame, text="Ähnl. Künstler:", font=('Arial', 8, 'bold')).grid(row=6, column=0, sticky=tk.W, pady=2)
+        self.metadata_similar_artist = tk.StringVar()
+        self.similar_artist_entry = ttk.Entry(advanced_frame, textvariable=self.metadata_similar_artist, font=('Arial', 8))
+        self.similar_artist_entry.grid(row=6, column=1, columnspan=3, sticky=(tk.W, tk.E), pady=2, padx=(5, 0))
+        self.similar_artist_entry.bind('<KeyRelease>', lambda e: self.on_advanced_metadata_change('similar_artist'))
+        
+        # Row 7: Kommentar
+        ttk.Label(advanced_frame, text="Kommentar:", font=('Arial', 8, 'bold')).grid(row=7, column=0, sticky=tk.W, pady=2)
+        self.metadata_comment = tk.StringVar()
+        self.comment_entry = ttk.Entry(advanced_frame, textvariable=self.metadata_comment, font=('Arial', 8))
+        self.comment_entry.grid(row=7, column=1, columnspan=3, sticky=(tk.W, tk.E), pady=2, padx=(5, 0))
+        self.comment_entry.bind('<KeyRelease>', lambda e: self.on_advanced_metadata_change('comment'))
+        
+        # Row 8: Songtext (mehrzeilig)
+        ttk.Label(advanced_frame, text="Songtext:", font=('Arial', 8, 'bold')).grid(row=8, column=0, sticky=(tk.W, tk.N), pady=2)
+        self.metadata_lyrics = tk.StringVar()
+        # Verwende Text-Widget für mehrzeilige Lyrics
+        lyrics_frame = ttk.Frame(advanced_frame)
+        lyrics_frame.grid(row=8, column=1, columnspan=3, sticky=(tk.W, tk.E), pady=2, padx=(5, 0))
+        lyrics_frame.columnconfigure(0, weight=1)
+        
+        self.lyrics_text = tk.Text(lyrics_frame, height=3, wrap=tk.WORD, font=('Arial', 8))
+        lyrics_scrollbar = ttk.Scrollbar(lyrics_frame, orient=tk.VERTICAL, command=self.lyrics_text.yview)
+        self.lyrics_text.configure(yscrollcommand=lyrics_scrollbar.set)
+        self.lyrics_text.grid(row=0, column=0, sticky=(tk.W, tk.E))
+        lyrics_scrollbar.grid(row=0, column=1, sticky=(tk.N, tk.S))
+        self.lyrics_text.bind('<KeyRelease>', lambda e: self.on_lyrics_change())
+        
+        # Vorgemerkte Änderungen anzeigen
+        self.changes_frame = ttk.LabelFrame(metadata_frame, text="📝 Vorgemerkte Änderungen", padding=8)
+        self.changes_frame.grid(row=3, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(0, 5))
+        self.changes_frame.columnconfigure(0, weight=1)
+        
+        self.changes_text = tk.Text(self.changes_frame, height=3, wrap=tk.WORD, font=('Arial', 8))
+        self.changes_text.pack(fill='both', expand=True)
+        self.changes_text.config(state='disabled')  # Nur anzeigen, nicht editieren
+        
         # Cover Bereich
         cover_frame = ttk.LabelFrame(metadata_frame, text="🖼️ Cover", padding=8)
-        cover_frame.grid(row=2, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(0, 10))
+        cover_frame.grid(row=4, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(0, 5))
         cover_frame.columnconfigure(0, weight=1)
         
         # Vorgemerkte Änderungen anzeigen (vor Cover-Bereich)
@@ -421,7 +552,7 @@ class MP3TaggerGUI:
         
         # Aktionen Bereich
         actions_frame = ttk.LabelFrame(metadata_frame, text="⚡ Aktionen", padding=8)
-        actions_frame.grid(row=5, column=0, columnspan=2, sticky=(tk.W, tk.E))
+        actions_frame.grid(row=6, column=0, columnspan=2, sticky=(tk.W, tk.E))
         actions_frame.columnconfigure(0, weight=1)
         
         # Buttons
@@ -457,7 +588,7 @@ class MP3TaggerGUI:
             from mutagen.mp3 import MP3
             mp3_file = MP3(file_path)
             
-            # Dauer
+            # Dauer und Bitrate
             if hasattr(mp3_file, 'info') and mp3_file.info.length:
                 duration = mp3_file.info.length
                 minutes = int(duration // 60)
@@ -465,6 +596,13 @@ class MP3TaggerGUI:
                 self.metadata_duration.set(f"{minutes}:{seconds:02d}")
             else:
                 self.metadata_duration.set("-")
+            
+            # Bitrate
+            if hasattr(mp3_file, 'info') and hasattr(mp3_file.info, 'bitrate'):
+                bitrate = mp3_file.info.bitrate
+                self.metadata_bitrate.set(f"{bitrate} kbps")
+            else:
+                self.metadata_bitrate.set("-")
             
             # Tags (mit vorgemerkten Änderungen)
             original_title = mp3_file.get('TIT2', [''])[0] if mp3_file.get('TIT2') else ""
@@ -501,6 +639,76 @@ class MP3TaggerGUI:
                 else:
                     # Unverändert - normal
                     entry_widget.configure(font=('Arial', 9))
+            
+            # Advanced Tags laden
+            if hasattr(self, 'metadata_release_year'):
+                original_release_year = self.get_original_advanced_metadata_value(file_path, 'release_year')
+                original_rating = self.get_original_advanced_metadata_value(file_path, 'rating')
+                original_bpm = self.get_original_advanced_metadata_value(file_path, 'bpm')
+                original_energy = self.get_original_advanced_metadata_value(file_path, 'energy')
+                original_danceability = self.get_original_advanced_metadata_value(file_path, 'danceability')
+                original_mood = self.get_original_advanced_metadata_value(file_path, 'mood')
+                original_similar_artist = self.get_original_advanced_metadata_value(file_path, 'similar_artist')
+                original_comment = self.get_original_advanced_metadata_value(file_path, 'comment')
+                
+                # Neue erweiterte Felder
+                original_url = self.get_original_advanced_metadata_value(file_path, 'url')
+                original_era = self.get_original_advanced_metadata_value(file_path, 'era')
+                original_style = self.get_original_advanced_metadata_value(file_path, 'style')
+                original_energy_level = self.get_original_advanced_metadata_value(file_path, 'energy_level')
+                original_lyrics = self.get_original_advanced_metadata_value(file_path, 'lyrics')
+                
+                # Vorgemerkte Änderungen berücksichtigen
+                self.metadata_release_year.set(pending.get('release_year', original_release_year))
+                self.metadata_rating.set(pending.get('rating', original_rating))
+                self.metadata_bpm.set(pending.get('bpm', original_bpm))
+                self.metadata_energy.set(pending.get('energy', original_energy))
+                self.metadata_danceability.set(pending.get('danceability', original_danceability))
+                self.metadata_mood.set(pending.get('mood', original_mood))
+                self.metadata_similar_artist.set(pending.get('similar_artist', original_similar_artist))
+                self.metadata_comment.set(pending.get('comment', original_comment))
+                
+                # Neue erweiterte Felder setzen
+                self.metadata_url.set(pending.get('url', original_url))
+                self.metadata_era.set(pending.get('era', original_era))
+                self.metadata_style.set(pending.get('style', original_style))
+                self.metadata_energy_level.set(pending.get('energy_level', original_energy_level))
+                
+                # Lyrics in Text-Widget setzen
+                self.lyrics_text.delete('1.0', tk.END)
+                lyrics_content = pending.get('lyrics', original_lyrics)
+                if lyrics_content:
+                    self.lyrics_text.insert('1.0', lyrics_content)
+                
+                # Advanced Entry-Felder styling
+                advanced_entry_fields = {
+                    'release_year': self.release_year_entry,
+                    'rating': self.rating_entry,
+                    'bpm': self.bpm_entry,
+                    'energy': self.energy_entry,
+                    'danceability': self.danceability_entry,
+                    'mood': self.mood_entry,
+                    'similar_artist': self.similar_artist_entry,
+                    'comment': self.comment_entry,
+                    'url': self.url_entry,
+                    'era': self.era_entry,
+                    'style': self.style_entry,
+                    'energy_level': self.energy_level_entry
+                }
+                
+                for field, entry_widget in advanced_entry_fields.items():
+                    if field in pending:
+                        # Geändert - kursiv
+                        entry_widget.configure(font=('Arial', 8, 'italic'))
+                    else:
+                        # Unverändert - normal
+                        entry_widget.configure(font=('Arial', 8))
+                
+                # Lyrics Text-Widget Styling
+                if 'lyrics' in pending:
+                    self.lyrics_text.configure(font=('Arial', 8, 'italic'))
+                else:
+                    self.lyrics_text.configure(font=('Arial', 8))
             
             # Cover Status und Anzeige
             cover_found = False
@@ -690,6 +898,184 @@ class MP3TaggerGUI:
         if len(selected) > 1:
             self.apply_change_to_multiple_files(field, new_value)
     
+    def on_advanced_metadata_change(self, field):
+        """Wird aufgerufen wenn ein Advanced-Metadaten-Feld geändert wird"""
+        if not self.current_file_path:
+            return
+            
+        # Aktuellen Wert aus dem Entry-Feld holen
+        field_vars = {
+            'release_year': self.metadata_release_year,
+            'rating': self.metadata_rating,
+            'bpm': self.metadata_bpm,
+            'energy': self.metadata_energy,
+            'danceability': self.metadata_danceability,
+            'mood': self.metadata_mood,
+            'similar_artist': self.metadata_similar_artist,
+            'comment': self.metadata_comment,
+            'url': self.metadata_url,
+            'era': self.metadata_era,
+            'style': self.metadata_style,
+            'energy_level': self.metadata_energy_level
+        }
+        
+        if field not in field_vars:
+            return
+            
+        new_value = field_vars[field].get()
+        
+        # Vorgemerkte Änderungen verwalten
+        if self.current_file_path not in self.pending_changes:
+            self.pending_changes[self.current_file_path] = {}
+            
+        # Originalwert aus der Datei laden (zur Vergleich)
+        original_value = self.get_original_advanced_metadata_value(self.current_file_path, field)
+        
+        if new_value != original_value:
+            # Änderung vormerken
+            self.pending_changes[self.current_file_path][field] = new_value
+            self.changed_entry_fields.add(field)
+            
+            # Entry-Feld kursiv markieren 
+            entry_widgets = {
+                'release_year': self.release_year_entry,
+                'rating': self.rating_entry,
+                'bpm': self.bpm_entry,
+                'energy': self.energy_entry,
+                'danceability': self.danceability_entry,
+                'mood': self.mood_entry,
+                'similar_artist': self.similar_artist_entry,
+                'comment': self.comment_entry,
+                'url': self.url_entry,
+                'era': self.era_entry,
+                'style': self.style_entry,
+                'energy_level': self.energy_level_entry
+            }
+            if field in entry_widgets:
+                entry_widgets[field].configure(font=('Arial', 8, 'italic'))
+                
+            print(f"📝 Advanced-Änderung vorgemerkt: {field} = '{new_value}' für {os.path.basename(self.current_file_path)}")
+        else:
+            # Änderung zurückgenommen
+            if field in self.pending_changes.get(self.current_file_path, {}):
+                del self.pending_changes[self.current_file_path][field]
+            self.changed_entry_fields.discard(field)
+            
+            # Entry-Feld normal markieren
+            entry_widgets = {
+                'release_year': self.release_year_entry,
+                'rating': self.rating_entry,
+                'bpm': self.bpm_entry,
+                'energy': self.energy_entry,
+                'danceability': self.danceability_entry,
+                'mood': self.mood_entry,
+                'similar_artist': self.similar_artist_entry,
+                'comment': self.comment_entry,
+                'url': self.url_entry,
+                'era': self.era_entry,
+                'style': self.style_entry,
+                'energy_level': self.energy_level_entry
+            }
+            if field in entry_widgets:
+                entry_widgets[field].configure(font=('Arial', 8))
+        
+        # Änderungen-Panel aktualisieren
+        self.update_changes_display()
+        
+        # Bei mehreren ausgewählten Dateien auch auf diese anwenden
+        selected = self.files_tree.selection()
+        if len(selected) > 1:
+            self.apply_change_to_multiple_files(field, new_value)
+    
+    def on_lyrics_change(self):
+        """Wird aufgerufen wenn das Lyrics-Textfeld geändert wird"""
+        if not self.current_file_path:
+            return
+            
+        # Aktuellen Wert aus dem Text-Widget holen
+        new_value = self.lyrics_text.get('1.0', tk.END).strip()
+        
+        # Vorgemerkte Änderungen verwalten
+        if self.current_file_path not in self.pending_changes:
+            self.pending_changes[self.current_file_path] = {}
+            
+        # Originalwert aus der Datei laden (zur Vergleich)
+        original_value = self.get_original_advanced_metadata_value(self.current_file_path, 'lyrics')
+        
+        if new_value != original_value:
+            # Änderung vormerken
+            self.pending_changes[self.current_file_path]['lyrics'] = new_value
+            self.changed_entry_fields.add('lyrics')
+            
+            # Text-Widget kursiv markieren 
+            self.lyrics_text.configure(font=('Arial', 8, 'italic'))
+                
+            print(f"📝 Lyrics-Änderung vorgemerkt für {os.path.basename(self.current_file_path)}")
+        else:
+            # Änderung zurückgenommen
+            if 'lyrics' in self.pending_changes.get(self.current_file_path, {}):
+                del self.pending_changes[self.current_file_path]['lyrics']
+            self.changed_entry_fields.discard('lyrics')
+            
+            # Text-Widget normal markieren
+            self.lyrics_text.configure(font=('Arial', 8))
+        
+        # Änderungen-Panel aktualisieren
+        self.update_changes_display()
+    
+    
+    def get_original_advanced_metadata_value(self, file_path, field):
+        """Holt den ursprünglichen Advanced-Metadaten-Wert aus der Datei"""
+        try:
+            from mutagen.mp3 import MP3
+            mp3_file = MP3(file_path)
+            
+            # Advanced Field Mapping - nutzt TXXX für Custom Tags
+            field_map = {
+                'release_year': 'TDRL',  # Release Date
+                'rating': 'POPM',        # Popularimeter (vereinfacht)
+                'bpm': 'TBPM',           # BPM
+                'energy': 'TXXX:ENERGY',
+                'danceability': 'TXXX:DANCEABILITY',
+                'mood': 'TXXX:MOOD',
+                'similar_artist': 'TXXX:SIMILAR_ARTIST',
+                'comment': 'COMM::eng',  # Comment
+                'url': 'TXXX:URL',
+                'era': 'TXXX:ERA',
+                'style': 'TXXX:STYLE',
+                'energy_level': 'TXXX:ENERGY_LEVEL',
+                'lyrics': 'USLT::eng'   # Unsychronized Lyrics
+            }
+            
+            if field in field_map:
+                tag_name = field_map[field]
+                
+                if tag_name.startswith('TXXX:'):
+                    # Custom TXXX Tag
+                    for key in mp3_file.keys():
+                        if key.startswith('TXXX:') and tag_name.split(':')[1] in key:
+                            return str(mp3_file[key].text[0])
+                elif tag_name == 'POPM':
+                    # Rating - vereinfacht
+                    if tag_name in mp3_file:
+                        rating = mp3_file[tag_name].rating
+                        return str(int(rating / 51)) if rating else ""  # 0-255 -> 0-5
+                elif tag_name == 'COMM::eng':
+                    # Comment
+                    if tag_name in mp3_file:
+                        return str(mp3_file[tag_name].text[0])
+                elif tag_name == 'USLT::eng':
+                    # Lyrics
+                    if tag_name in mp3_file:
+                        return str(mp3_file[tag_name].text)
+                else:
+                    # Standard Tag
+                    if tag_name in mp3_file:
+                        return str(mp3_file[tag_name].text[0])
+            return ""
+        except:
+            return ""
+    
     def get_original_metadata_value(self, file_path, field):
         """Holt den ursprünglichen Metadaten-Wert aus der Datei"""
         try:
@@ -807,6 +1193,24 @@ class MP3TaggerGUI:
         self.metadata_genre.set("-")
         self.metadata_cover_status.set("Kein Cover")
         
+        # Advanced Felder zurücksetzen
+        if hasattr(self, 'metadata_release_year'):
+            self.metadata_release_year.set("-")
+        if hasattr(self, 'metadata_rating'):
+            self.metadata_rating.set("-")
+        if hasattr(self, 'metadata_bpm'):
+            self.metadata_bpm.set("-")
+        if hasattr(self, 'metadata_energy'):
+            self.metadata_energy.set("-")
+        if hasattr(self, 'metadata_danceability'):
+            self.metadata_danceability.set("-")
+        if hasattr(self, 'metadata_mood'):
+            self.metadata_mood.set("-")
+        if hasattr(self, 'metadata_similar_artist'):
+            self.metadata_similar_artist.set("-")
+        if hasattr(self, 'metadata_comment'):
+            self.metadata_comment.set("-")
+        
         # Cover-Bild zurücksetzen
         if hasattr(self, 'metadata_cover_image'):
             self.metadata_cover_image.configure(image="", text="Kein Cover\nverfügbar")
@@ -825,6 +1229,24 @@ class MP3TaggerGUI:
             self.track_entry.configure(font=('Arial', 9))
         if hasattr(self, 'genre_entry'):
             self.genre_entry.configure(font=('Arial', 9))
+            
+        # Advanced Entry-Felder normal formatieren
+        if hasattr(self, 'release_year_entry'):
+            self.release_year_entry.configure(font=('Arial', 8))
+        if hasattr(self, 'rating_entry'):
+            self.rating_entry.configure(font=('Arial', 8))
+        if hasattr(self, 'bpm_entry'):
+            self.bpm_entry.configure(font=('Arial', 8))
+        if hasattr(self, 'energy_entry'):
+            self.energy_entry.configure(font=('Arial', 8))
+        if hasattr(self, 'danceability_entry'):
+            self.danceability_entry.configure(font=('Arial', 8))
+        if hasattr(self, 'mood_entry'):
+            self.mood_entry.configure(font=('Arial', 8))
+        if hasattr(self, 'similar_artist_entry'):
+            self.similar_artist_entry.configure(font=('Arial', 8))
+        if hasattr(self, 'comment_entry'):
+            self.comment_entry.configure(font=('Arial', 8))
             
         # Änderungen-Panel aktualisieren
         if hasattr(self, 'changes_text'):
@@ -2050,6 +2472,50 @@ class MP3TaggerGUI:
                         mp3_file['TRCK'] = TRCK(encoding=3, text=changes['track'])
                     if 'genre' in changes:
                         mp3_file['TCON'] = TCON(encoding=3, text=changes['genre'])
+                    
+                    # Advanced Tags anwenden
+                    if 'release_year' in changes:
+                        from mutagen.id3 import TDRL
+                        mp3_file['TDRL'] = TDRL(encoding=3, text=changes['release_year'])
+                    if 'rating' in changes:
+                        from mutagen.id3 import POPM
+                        rating_value = int(float(changes['rating']) * 51) if changes['rating'].isdigit() else 0  # 0-5 -> 0-255
+                        mp3_file['POPM'] = POPM(email="user@example.com", rating=rating_value, count=1)
+                    if 'bpm' in changes:
+                        from mutagen.id3 import TBPM
+                        mp3_file['TBPM'] = TBPM(encoding=3, text=changes['bpm'])
+                    if 'energy' in changes:
+                        from mutagen.id3 import TXXX
+                        mp3_file['TXXX:ENERGY'] = TXXX(encoding=3, desc='ENERGY', text=changes['energy'])
+                    if 'danceability' in changes:
+                        from mutagen.id3 import TXXX
+                        mp3_file['TXXX:DANCEABILITY'] = TXXX(encoding=3, desc='DANCEABILITY', text=changes['danceability'])
+                    if 'mood' in changes:
+                        from mutagen.id3 import TXXX
+                        mp3_file['TXXX:MOOD'] = TXXX(encoding=3, desc='MOOD', text=changes['mood'])
+                    if 'similar_artist' in changes:
+                        from mutagen.id3 import TXXX
+                        mp3_file['TXXX:SIMILAR_ARTIST'] = TXXX(encoding=3, desc='SIMILAR_ARTIST', text=changes['similar_artist'])
+                    if 'comment' in changes:
+                        from mutagen.id3 import COMM
+                        mp3_file['COMM::eng'] = COMM(encoding=3, lang='eng', desc='', text=changes['comment'])
+                    
+                    # Neue erweiterte Tags
+                    if 'url' in changes:
+                        from mutagen.id3 import TXXX
+                        mp3_file['TXXX:URL'] = TXXX(encoding=3, desc='URL', text=changes['url'])
+                    if 'era' in changes:
+                        from mutagen.id3 import TXXX
+                        mp3_file['TXXX:ERA'] = TXXX(encoding=3, desc='ERA', text=changes['era'])
+                    if 'style' in changes:
+                        from mutagen.id3 import TXXX
+                        mp3_file['TXXX:STYLE'] = TXXX(encoding=3, desc='STYLE', text=changes['style'])
+                    if 'energy_level' in changes:
+                        from mutagen.id3 import TXXX
+                        mp3_file['TXXX:ENERGY_LEVEL'] = TXXX(encoding=3, desc='ENERGY_LEVEL', text=changes['energy_level'])
+                    if 'lyrics' in changes:
+                        from mutagen.id3 import USLT
+                        mp3_file['USLT::eng'] = USLT(encoding=3, lang='eng', desc='', text=changes['lyrics'])
                     
                     # Datei speichern
                     mp3_file.save()
