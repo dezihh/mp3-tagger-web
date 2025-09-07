@@ -10,6 +10,8 @@ import os
 import threading
 from pathlib import Path
 import json
+from PIL import Image, ImageTk  # Für Cover-Vorschauen
+import io
 
 # Import der bestehenden Tagger-Module
 from tagger.desktop_mp3_processor import DesktopMP3Processor
@@ -541,14 +543,16 @@ class MP3TaggerGUI:
         self.cover_preview_frame = ttk.Frame(cover_frame)
         self.cover_preview_frame.grid(row=1, column=0, pady=5)
         
-        # Cover-Image-Label mit Standardgröße
+        # Cover-Image-Label mit angemessener Größe für Vorschau
         self.metadata_cover_image = tk.Label(self.cover_preview_frame, 
-                                           width=25, height=15, 
+                                           width=190, height=190,  # Etwas größer als Thumbnail
                                            bg='lightgray', 
                                            text='Kein Cover\nverfügbar', 
                                            compound='center',
                                            relief='sunken',
-                                           borderwidth=1)
+                                           borderwidth=2,
+                                           font=('Arial', 10),
+                                           anchor='center')
         self.metadata_cover_image.pack()
         
         # Aktionen Bereich
@@ -715,16 +719,54 @@ class MP3TaggerGUI:
             cover_found = False
             cover_image = None
             
-            # Internes Cover prüfen
-            if mp3_file.get('APIC:'):
+            # 1. Priorität: Cover aus pending_changes (falls vorhanden)
+            if file_path in self.pending_changes and 'cover' in self.pending_changes[file_path]:
                 try:
                     from PIL import Image, ImageTk
                     import io
                     
-                    apic = mp3_file.get('APIC:')
-                    if apic.data:
+                    cover_data = self.pending_changes[file_path]['cover']
+                    if cover_data:
+                        # Cover-Daten extrahieren (kann Tupel oder direkte Bytes sein)
+                        if isinstance(cover_data, tuple) and len(cover_data) == 2:
+                            mime_type, image_bytes = cover_data
+                        else:
+                            image_bytes = cover_data
+                        
+                        # Cover-Bild aus pending_changes laden und anzeigen
+                        image = Image.open(io.BytesIO(image_bytes))
+                        # Bild auf passende Größe skalieren (max 180x180)
+                        image.thumbnail((180, 180), Image.Resampling.LANCZOS)
+                        cover_image = ImageTk.PhotoImage(image)
+                        
+                        # Bild im Label anzeigen
+                        self.metadata_cover_image.configure(image=cover_image, text="")
+                        self.metadata_cover_image.image = cover_image  # Referenz halten
+                        
+                        # Status setzen (als Änderung markiert)
+                        self.metadata_cover_status.set(f"🔄 Neues Cover ({image.size[0]}x{image.size[1]}) - Änderung")
+                        cover_found = True
+                except Exception as e:
+                    print(f"Fehler beim Laden des Cover aus pending_changes: {e}")
+                    self.metadata_cover_status.set("🔄 Neues Cover (Fehler beim Anzeigen)")
+            
+            # 2. Priorität: Internes Cover prüfen
+            if not cover_found:
+                try:
+                    from PIL import Image, ImageTk
+                    import io
+                    
+                    # Alle APIC-Tags prüfen (nicht nur 'APIC:')
+                    apic_tag = None
+                    if mp3_file.tags:
+                        for tag_name in mp3_file.tags.keys():
+                            if tag_name.startswith('APIC'):
+                                apic_tag = mp3_file.tags[tag_name]
+                                break
+                    
+                    if apic_tag and apic_tag.data:
                         # Cover-Bild laden und anzeigen
-                        image = Image.open(io.BytesIO(apic.data))
+                        image = Image.open(io.BytesIO(apic_tag.data))
                         # Bild auf passende Größe skalieren (max 180x180)
                         image.thumbnail((180, 180), Image.Resampling.LANCZOS)
                         cover_image = ImageTk.PhotoImage(image)
@@ -1403,8 +1445,9 @@ class MP3TaggerGUI:
         if full_path and self.cover_manager:
             try:
                 filename = os.path.basename(full_path)
-                # Cover-Dialog öffnen
-                dialog = CoverSelectionDialog(self.root, full_path, filename, self.cover_manager)
+                # Cover-Dialog öffnen mit Callback
+                dialog = CoverSelectionDialog(self.root, full_path, filename, self.cover_manager, 
+                                            callback=self.on_cover_selected)
                 print(f"🖼️ Cover-Dialog für {filename} geöffnet")
             except Exception as e:
                 print(f"🚨 Cover-Dialog Fehler: {e}")
@@ -1414,6 +1457,103 @@ class MP3TaggerGUI:
                 messagebox.showerror("Fehler", "Datei nicht gefunden oder ungültiges Format")
             else:
                 messagebox.showerror("Fehler", "Cover-Manager nicht verfügbar")
+
+    def on_cover_selected(self, file_path, cover_source):
+        """Callback wenn Cover aus Dialog ausgewählt wurde"""
+        print(f"📞 Callback wird aufgerufen mit: {file_path}, {cover_source}")
+        if cover_source and self.cover_manager:
+            print(f"🎨 Starte Cover-Anwendung für: {os.path.basename(file_path)}")
+            # Cover anwenden
+            threading.Thread(target=self._apply_selected_cover_worker, 
+                           args=(file_path, cover_source), daemon=True).start()
+        else:
+            print("❌ Kein Cover ausgewählt oder Cover-Manager nicht verfügbar")
+
+    def _apply_selected_cover_worker(self, file_path, cover_source):
+        """Worker-Thread für Cover-Anwendung auf eine einzelne Datei"""
+        try:
+            print(f"🔄 Wende Cover an auf: {os.path.basename(file_path)}")
+            
+            # Cover-Daten von CoverSource abrufen
+            if cover_source.type == 'url':
+                if hasattr(cover_source, 'preview_data') and cover_source.preview_data:
+                    cover_data = cover_source.preview_data
+                else:
+                    # URL-Cover herunterladen falls preview_data nicht verfügbar
+                    import requests
+                    response = requests.get(cover_source.path)
+                    response.raise_for_status()
+                    cover_data = response.content
+                    
+                # MIME-Type bestimmen
+                if cover_data.startswith(b'\xff\xd8\xff'):
+                    mime_type = 'image/jpeg'
+                elif cover_data.startswith(b'\x89PNG'):
+                    mime_type = 'image/png'
+                else:
+                    mime_type = 'image/jpeg'  # Fallback
+                    
+            elif cover_source.type == 'external':
+                with open(cover_source.path, 'rb') as f:
+                    cover_data = f.read()
+                    
+                # MIME-Type aus Dateierweiterung
+                if cover_source.path.lower().endswith('.png'):
+                    mime_type = 'image/png'
+                else:
+                    mime_type = 'image/jpeg'
+                    
+            elif cover_source.type == 'internal':
+                # Cover aus anderer MP3-Datei extrahieren
+                from mutagen.mp3 import MP3
+                audio = MP3(cover_source.path)
+                if audio.tags and 'APIC:' in audio.tags:
+                    apic = audio.tags['APIC:']
+                    cover_data = apic.data
+                    mime_type = apic.mime
+                else:
+                    raise Exception("Kein Cover in Quell-MP3 gefunden")
+            else:
+                raise Exception(f"Unbekannter Cover-Typ: {cover_source.type}")
+            
+            # Cover mit MIME-Type in pending_changes registrieren
+            cover_with_mime = (mime_type, cover_data)
+            self.root.after(0, lambda: self._register_cover_change(file_path, cover_with_mime))
+            
+        except Exception as e:
+            print(f"🚨 Fehler beim Cover-Anwenden: {e}")
+            self.root.after(0, lambda: self._on_cover_applied(file_path, False))
+
+    def _register_cover_change(self, file_path, cover_data):
+        """Registriert Cover-Änderung in pending_changes"""
+        try:
+            # Cover in pending_changes eintragen
+            if file_path not in self.pending_changes:
+                self.pending_changes[file_path] = {}
+            
+            # Cover-Daten in pending_changes speichern
+            self.pending_changes[file_path]['cover'] = cover_data
+            
+            print(f"📝 Cover-Änderung registriert für: {os.path.basename(file_path)}")
+            
+            # GUI-Update
+            self._on_cover_applied(file_path, True)
+            
+        except Exception as e:
+            print(f"🚨 Fehler beim Registrieren der Cover-Änderung: {e}")
+            self._on_cover_applied(file_path, False)
+
+    def _on_cover_applied(self, file_path, success):
+        """GUI-Update nach Cover-Anwendung"""
+        if success:
+            print(f"✅ Cover erfolgreich angewendet auf: {os.path.basename(file_path)}")
+            # Metadaten-Panel aktualisieren
+            if self.current_file_path == file_path:
+                self.update_metadata_panel(file_path)
+            messagebox.showinfo("Erfolg", "Cover wurde erfolgreich angewendet!")
+        else:
+            print(f"❌ Cover-Anwendung fehlgeschlagen für: {os.path.basename(file_path)}")
+            messagebox.showerror("Fehler", "Cover konnte nicht angewendet werden")
 
     def edit_file_metadata_from_context(self):
         """Öffnet den Metadaten-Editor für die ausgewählte Datei (Kontextmenü)"""
@@ -1546,9 +1686,13 @@ class MP3TaggerGUI:
                     if filepath:
                         from mutagen.mp3 import MP3
                         mp3_file = MP3(filepath)
-                        if mp3_file.get('APIC:'):
-                            has_cover = True
-                        else:
+                        # Prüfe auf alle APIC-Tags (nicht nur 'APIC:')
+                        if mp3_file.tags:
+                            apic_tags = [k for k in mp3_file.tags.keys() if k.startswith('APIC')]
+                            if apic_tags:
+                                has_cover = True
+                        
+                        if not has_cover:
                             # Externes Cover prüfen (nur häufigste Namen)
                             directory = os.path.dirname(filepath)
                             for cover_name in ['cover.jpg', 'folder.jpg', 'album.jpg']:
@@ -1758,16 +1902,33 @@ class MP3TaggerGUI:
             # Verwende item_id für direkte Aktualisierung
             item_id = file_data.get('item_id')
             if not item_id:
+                print(f"⚠️ Keine item_id für Datei {file_data.get('filename', 'Unbekannt')}")
                 return
                 
+            # Alle aktuellen Spaltenwerte sammeln
+            current_values = list(self.files_tree.item(item_id, 'values'))
+            
+            # Cover-Status aktualisieren (Spalte 6 - Cover)
+            if 'cover_status' in file_data:
+                if len(current_values) > 6:
+                    current_values[6] = file_data['cover_status']
+                else:
+                    # Falls zu wenig Spalten, erweitern
+                    while len(current_values) <= 6:
+                        current_values.append('')
+                    current_values[6] = file_data['cover_status']
+                
+                print(f"📊 Cover-Status aktualisiert: {file_data.get('filename')} → {file_data['cover_status']}")
+            
             # Aktualisiere die Werte direkt über item_id
             self.files_tree.item(item_id, values=(
-                file_data.get('title', ''),
-                file_data.get('artist', ''),
-                file_data.get('album', ''),
-                file_data.get('year', ''),
-                file_data.get('track', ''),
-                file_data.get('genre', '')
+                file_data.get('title', current_values[0] if len(current_values) > 0 else ''),
+                file_data.get('artist', current_values[1] if len(current_values) > 1 else ''),
+                file_data.get('album', current_values[2] if len(current_values) > 2 else ''),
+                file_data.get('year', current_values[3] if len(current_values) > 3 else ''),
+                file_data.get('track', current_values[4] if len(current_values) > 4 else ''),
+                file_data.get('genre', current_values[5] if len(current_values) > 5 else ''),
+                file_data.get('cover_status', current_values[6] if len(current_values) > 6 else '')
             ))
             
             # Checkbox automatisch aktivieren bei Änderungen
@@ -1779,6 +1940,8 @@ class MP3TaggerGUI:
                 
         except Exception as e:
             print(f"💥 Fehler beim Aktualisieren der Tabelle: {str(e)}")
+            import traceback
+            traceback.print_exc()
 
     # === Integrierte Funktionen ===
     
@@ -1892,70 +2055,29 @@ class MP3TaggerGUI:
         filepath = first_file.get('filepath')
         filename = first_file.get('filename', 'Unbekannt')
         
+        print(f"🖼️ Cover-Dialog für {filename} geöffnet")
+        print(f"   Dateipfad: {filepath}")
+        print(f"   Anzahl ausgewählte Dateien: {len(selected)}")
+        
         if not filepath:
             messagebox.showerror("Fehler", "Dateipfad nicht gefunden.")
             return
             
-        # Cover-Dialog öffnen
-        dialog = CoverSelectionDialog(self.root, filepath, filename, self.cover_manager)
-        result = dialog.show()
+        # Cover-Dialog öffnen mit Callback
+        def on_cover_selected(result):
+            print(f"📋 Cover-Callback aufgerufen: {result}")
+            if result:
+                print(f"✅ Cover ausgewählt - starte Anwendung")
+                print(f"   Cover-Typ: {result.type}")
+                print(f"   Cover-Pfad: {result.path}")
+                # Ausgewähltes Cover auf alle selektierten Dateien anwenden
+                threading.Thread(target=self._apply_selected_cover_worker, args=(selected, result), daemon=True).start()
+            else:
+                print("❌ Kein Cover ausgewählt oder Dialog abgebrochen")
         
-        if result:
-            # Ausgewähltes Cover auf alle selektierten Dateien anwenden
-            threading.Thread(target=self._apply_selected_cover_worker, args=(selected, result), daemon=True).start()
+        dialog = CoverSelectionDialog(self.root, filepath, filename, self.cover_manager, on_cover_selected)
+        # Dialog wird asynchron verarbeitet
 
-    def _apply_selected_cover_worker(self, selected_files, cover_choice):
-        """Worker-Thread zum Anwenden des ausgewählten Covers"""
-        try:
-            successful = 0
-            errors = 0
-            
-            for file_data in selected_files:
-                try:
-                    filepath = file_data.get('filepath')
-                    filename = file_data.get('filename', 'Unbekannt')
-                    
-                    if not filepath:
-                        errors += 1
-                        continue
-                    
-                    self.root.after(0, lambda f=filename: self.status_var.set(f"Wende Cover an auf: {f}..."))
-                    
-                    # Cover Manager für das Verzeichnis dieser Datei
-                    file_directory = os.path.dirname(filepath)
-                    file_cover_manager = CoverManager(file_directory)
-                    
-                    # Cover anwenden
-                    result = file_cover_manager.apply_cover_to_directory(
-                        cover_source=cover_choice,
-                        selected_files=[filepath]
-                    )
-                    
-                    if result.get('success', 0) > 0:
-                        # Status aktualisieren
-                        size_info = f"{cover_choice.size[0]}px" if cover_choice.size else "Unbekannt"
-                        type_prefix = cover_choice.type[0].upper() if cover_choice.type else "?"
-                        file_data['cover_status'] = f"{type_prefix}{size_info}"
-                        
-                        self.root.after(0, lambda: self._update_file_in_table(file_data))
-                        successful += 1
-                        print(f"✅ Cover angewendet auf {filename}")
-                    else:
-                        errors += 1
-                        print(f"⚠️ Cover konnte nicht angewendet werden auf {filename}")
-                        
-                except Exception as e:
-                    errors += 1
-                    print(f"💥 Fehler beim Cover-Anwenden auf {filename}: {str(e)}")
-            
-            # Abschlussmeldung
-            self.root.after(0, lambda: self.status_var.set(f"Cover-Anwendung abgeschlossen: {successful} erfolgreich, {errors} Fehler"))
-            self.root.after(0, lambda: messagebox.showinfo("Cover-Management", f"Cover angewendet.\n\nErfolgreich: {successful}\nFehler: {errors}"))
-            
-        except Exception as e:
-            self.root.after(0, lambda: messagebox.showerror("Fehler", f"Fehler beim Cover-Anwenden: {str(e)}"))
-            self.root.after(0, lambda: self.status_var.set("Fehler beim Cover-Anwenden"))
-        
     def load_covers(self):
         """Cover-Verwaltung für ausgewählte Dateien"""
         selected = self.get_selected_files()
@@ -2675,6 +2797,46 @@ class MP3TaggerGUI:
                         from mutagen.id3 import USLT
                         mp3_file['USLT::eng'] = USLT(encoding=3, lang='eng', desc='', text=changes['lyrics'])
                     
+                    # Cover anwenden falls vorhanden
+                    if 'cover' in changes:
+                        from mutagen.id3 import APIC
+                        
+                        # MIME-Type aus Cover-Daten ermitteln
+                        cover_data = changes['cover']
+                        if isinstance(cover_data, tuple) and len(cover_data) == 2:
+                            # Cover-Daten mit MIME-Type
+                            mime_type, actual_data = cover_data
+                        else:
+                            # Legacy: Nur Cover-Daten, MIME-Type erraten
+                            actual_data = cover_data
+                            # MIME-Type basierend auf Datei-Header bestimmen
+                            if actual_data.startswith(b'\xff\xd8\xff'):
+                                mime_type = 'image/jpeg'
+                            elif actual_data.startswith(b'\x89PNG'):
+                                mime_type = 'image/png'
+                            else:
+                                mime_type = 'image/jpeg'  # Fallback
+                        
+                        print(f"💾 Speichere Cover ({mime_type}, {len(actual_data)} Bytes) in {os.path.basename(file_path)}")
+                        
+                        # Sicherstellen, dass ID3-Tags existieren
+                        if mp3_file.tags is None:
+                            mp3_file.add_tags()
+                        
+                        # Bestehende APIC-Tags entfernen
+                        mp3_file.tags.delall('APIC')
+                        
+                        # Neues Cover hinzufügen
+                        mp3_file.tags.add(APIC(
+                            encoding=3,
+                            mime=mime_type,
+                            type=3,  # Cover (front)
+                            desc='Cover',
+                            data=actual_data
+                        ))
+                        
+                        print(f"✅ Cover-Tag hinzugefügt, Tags gesamt: {len(mp3_file.tags)}")
+                    
                     # Datei speichern
                     mp3_file.save()
                     success_count += 1
@@ -2871,20 +3033,22 @@ class MP3TaggerGUI:
 
 
 class CoverSelectionDialog:
-    """Dialog zur Auswahl von Covern"""
+    """Dialog zur Auswahl von Covern mit Vorschau"""
     
-    def __init__(self, parent, filepath, filename, cover_manager):
+    def __init__(self, parent, filepath, filename, cover_manager, callback=None):
         self.parent = parent
         self.filepath = filepath
         self.filename = filename
         self.cover_manager = cover_manager
+        self.callback = callback  # Callback-Funktion für Cover-Auswahl
         self.result = None
         self.cover_info = None
+        self.cover_previews = {}  # Cache für Cover-Vorschauen
         
         # Dialog erstellen
         self.dialog = tk.Toplevel(parent)
         self.dialog.title(f"Cover auswählen - {filename}")
-        self.dialog.geometry("600x500")
+        self.dialog.geometry("800x600")  # Größer für Vorschauen
         self.dialog.resizable(True, True)
         
         # Modal machen - mit Fehlerbehandlung
@@ -2911,40 +3075,64 @@ class CoverSelectionDialog:
         self.dialog.geometry(f"+{x}+{y}")
         
     def create_ui(self):
-        """Erstellt die Benutzeroberfläche"""
+        """Erstellt die Benutzeroberfläche mit Cover-Vorschau"""
         main_frame = ttk.Frame(self.dialog, padding="10")
         main_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
         
         self.dialog.columnconfigure(0, weight=1)
         self.dialog.rowconfigure(0, weight=1)
-        main_frame.columnconfigure(0, weight=1)
+        main_frame.columnconfigure(1, weight=1)  # Cover-Liste bekommt mehr Platz
         main_frame.rowconfigure(1, weight=1)
         
         # Titel
         title_label = ttk.Label(main_frame, text=f"Verfügbare Cover für: {self.filename}", 
                                font=('Arial', 12, 'bold'))
-        title_label.grid(row=0, column=0, pady=(0, 10), sticky=tk.W)
+        title_label.grid(row=0, column=0, columnspan=2, pady=(0, 10), sticky=tk.W)
         
-        # Cover-Liste
-        list_frame = ttk.Frame(main_frame)
-        list_frame.grid(row=1, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), pady=(0, 10))
+        # Linke Seite: Cover-Vorschau
+        preview_frame = ttk.LabelFrame(main_frame, text="Vorschau", padding="10")
+        preview_frame.grid(row=1, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), padx=(0, 10))
+        preview_frame.columnconfigure(0, weight=1)
+        
+        # Cover-Vorschau-Label
+        self.preview_label = ttk.Label(preview_frame, text="Kein Cover ausgewählt", 
+                                      background='lightgray', anchor='center')
+        self.preview_label.grid(row=0, column=0, pady=(0, 10), sticky=(tk.W, tk.E))
+        
+        # Cover-Details
+        self.details_frame = ttk.Frame(preview_frame)
+        self.details_frame.grid(row=1, column=0, sticky=(tk.W, tk.E))
+        
+        self.detail_labels = {}
+        detail_fields = ['Typ:', 'Größe:', 'Format:', 'Quelle:']
+        for i, field in enumerate(detail_fields):
+            ttk.Label(self.details_frame, text=field, font=('Arial', 9, 'bold')).grid(
+                row=i, column=0, sticky=tk.W, pady=1)
+            label = ttk.Label(self.details_frame, text="-")
+            label.grid(row=i, column=1, sticky=tk.W, padx=(10, 0), pady=1)
+            self.detail_labels[field] = label
+        
+        # Rechte Seite: Cover-Liste
+        list_frame = ttk.LabelFrame(main_frame, text="Verfügbare Cover", padding="10")
+        list_frame.grid(row=1, column=1, sticky=(tk.W, tk.E, tk.N, tk.S))
         list_frame.columnconfigure(0, weight=1)
         list_frame.rowconfigure(0, weight=1)
         
-        # Treeview für Cover
-        columns = ('type', 'source', 'size', 'format')
+        # Treeview für Cover (vereinfacht)
+        columns = ('type', 'size', 'source')
         self.covers_tree = ttk.Treeview(list_frame, columns=columns, show='headings', height=15)
         
         # Spalten konfigurieren
         self.covers_tree.heading('type', text='Typ')
-        self.covers_tree.heading('source', text='Quelle')
         self.covers_tree.heading('size', text='Größe')
-        self.covers_tree.heading('format', text='Format')
+        self.covers_tree.heading('source', text='Quelle')
         
         self.covers_tree.column('type', width=80)
-        self.covers_tree.column('source', width=300)
         self.covers_tree.column('size', width=100)
-        self.covers_tree.column('format', width=80)
+        self.covers_tree.column('source', width=200)
+        
+        # Selection-Event für Vorschau
+        self.covers_tree.bind('<<TreeviewSelect>>', self.on_cover_select)
         
         # Scrollbars
         v_scrollbar = ttk.Scrollbar(list_frame, orient=tk.VERTICAL, command=self.covers_tree.yview)
@@ -2955,43 +3143,195 @@ class CoverSelectionDialog:
         
         # Buttons
         button_frame = ttk.Frame(main_frame)
-        button_frame.grid(row=2, column=0, pady=(10, 0), sticky=tk.E)
+        button_frame.grid(row=2, column=0, columnspan=2, pady=(10, 0), sticky=tk.E)
         
         ttk.Button(button_frame, text="Verwenden", command=self.select_cover).pack(side=tk.LEFT, padx=(0, 5))
         ttk.Button(button_frame, text="Abbrechen", command=self.cancel).pack(side=tk.LEFT)
         
         # Status
         self.status_label = ttk.Label(main_frame, text="Lade Cover...")
-        self.status_label.grid(row=3, column=0, pady=(5, 0), sticky=tk.W)
+        self.status_label.grid(row=3, column=0, columnspan=2, pady=(5, 0), sticky=tk.W)
         
     def load_covers(self):
-        """Lädt verfügbare Cover"""
+        """Lädt verfügbare Cover mit Vorschau-Generierung"""
         try:
+            print(f"🔍 Lade Cover für Dialog: {self.filename}")
+            
             # Cover Manager für das Verzeichnis der Datei
             file_directory = os.path.dirname(self.filepath)
             file_cover_manager = CoverManager(file_directory)
             
+            print(f"   Verzeichnis: {file_directory}")
+            
             # Cover-Analyse durchführen
             self.cover_info = file_cover_manager.analyze_directory_covers()
             
-            # Cover in Treeview anzeigen
-            for cover in self.cover_info.unique_covers:
-                type_text = cover.type.capitalize()
-                source_text = os.path.basename(cover.path) if cover.type == 'external' else cover.path
-                size_text = f"{cover.size[0]}x{cover.size[1]}"
-                format_text = cover.format
+            print(f"   Gefundene Cover: {len(self.cover_info.unique_covers)}")
+            
+            # Cover in Treeview anzeigen und Vorschauen erstellen
+            for i, cover in enumerate(self.cover_info.unique_covers):
+                print(f"   Cover {i+1}: {cover.type} - {cover.path} - {cover.size}")
                 
-                self.covers_tree.insert('', 'end', values=(type_text, source_text, size_text, format_text))
+                # Typ-Text optimieren
+                type_map = {'internal': 'Intern', 'external': 'Extern', 'url': 'Online'}
+                type_text = type_map.get(cover.type, cover.type.capitalize())
+                
+                # Quelle-Text kürzen
+                if cover.type == 'external':
+                    source_text = os.path.basename(cover.path)
+                elif cover.type == 'url':
+                    source_text = "Online-Cover"
+                else:
+                    source_text = "MP3-Datei"
+                
+                size_text = f"{cover.size[0]}×{cover.size[1]}px"
+                
+                # In Treeview einfügen
+                item_id = self.covers_tree.insert('', 'end', values=(type_text, size_text, source_text))
+                print(f"   TreeView Item-ID: {item_id}")
+                
+                # Vorschau-Thumbnail erstellen/laden
+                self.create_cover_preview(cover, item_id)
+            
+            print(f"   Preview-Cache-Items: {len(self.cover_previews)}")
             
             # Status aktualisieren
             if self.cover_info.unique_covers:
                 self.status_label.config(text=f"{len(self.cover_info.unique_covers)} Cover gefunden")
+                # Erstes Cover automatisch auswählen
+                if self.covers_tree.get_children():
+                    first_item = self.covers_tree.get_children()[0]
+                    self.covers_tree.selection_set(first_item)
+                    self.covers_tree.focus(first_item)
+                    self.on_cover_select(None)
+                    print(f"   Erstes Cover automatisch ausgewählt: {first_item}")
             else:
                 self.status_label.config(text="Keine Cover verfügbar")
+                print("   ⚠️ Keine Cover verfügbar")
                 
         except Exception as e:
-            self.status_label.config(text=f"Fehler beim Laden: {str(e)}")
-            print(f"💥 Fehler beim Laden der Cover: {str(e)}")
+            error_msg = f"Fehler beim Laden: {str(e)}"
+            self.status_label.config(text=error_msg)
+            print(f"💥 {error_msg}")
+            import traceback
+            traceback.print_exc()
+    
+    def create_cover_preview(self, cover, item_id):
+        """Erstellt Vorschau-Thumbnail für ein Cover"""
+        try:
+            if cover.preview_data:
+                # Bereits vorhandene Vorschau nutzen
+                thumbnail_data = cover.preview_data
+            else:
+                # Neue Vorschau erstellen
+                thumbnail_data = self.generate_thumbnail(cover)
+            
+            if thumbnail_data:
+                # PIL Image aus Daten erstellen
+                from PIL import Image, ImageTk
+                import io
+                
+                image = Image.open(io.BytesIO(thumbnail_data))
+                
+                # Für tkinter optimieren (150x150 max)
+                image.thumbnail((150, 150), Image.Resampling.LANCZOS)
+                
+                # Zu PhotoImage konvertieren
+                photo = ImageTk.PhotoImage(image)
+                
+                # Im Cache speichern (wichtig: Referenz behalten!)
+                self.cover_previews[item_id] = {
+                    'photo': photo,
+                    'cover': cover,
+                    'image_data': thumbnail_data
+                }
+            
+        except Exception as e:
+            print(f"⚠️ Fehler beim Erstellen der Vorschau für {cover.path}: {e}")
+    
+    def generate_thumbnail(self, cover):
+        """Generiert Thumbnail für Cover ohne preview_data"""
+        try:
+            from PIL import Image
+            import io
+            
+            if cover.type == 'external':
+                # Aus Datei laden
+                with open(cover.path, 'rb') as f:
+                    image_data = f.read()
+            elif cover.type == 'internal':
+                # Aus MP3 extrahieren
+                from mutagen.mp3 import MP3
+                audio = MP3(cover.path)
+                if 'APIC:' in audio:
+                    image_data = audio['APIC:'].data
+                else:
+                    # Suche nach anderen APIC Tags
+                    apic_tags = [tag for tag in audio.tags.values() 
+                               if hasattr(tag, 'type') and hasattr(tag, 'data')]
+                    if apic_tags:
+                        image_data = apic_tags[0].data
+                    else:
+                        return None
+            elif cover.type == 'url':
+                # Von URL laden (mit Timeout)
+                import requests
+                response = requests.get(cover.path, timeout=5)
+                response.raise_for_status()
+                image_data = response.content
+            else:
+                return None
+            
+            # Thumbnail erstellen
+            image = Image.open(io.BytesIO(image_data))
+            image.thumbnail((100, 100), Image.Resampling.LANCZOS)
+            
+            # Als JPEG bytes zurückgeben
+            output = io.BytesIO()
+            image.save(output, format='JPEG', quality=85)
+            return output.getvalue()
+            
+        except Exception as e:
+            print(f"⚠️ Fehler beim Generieren der Vorschau: {e}")
+            return None
+    
+    def on_cover_select(self, event):
+        """Wird aufgerufen wenn Cover ausgewählt wird - aktualisiert Vorschau"""
+        selection = self.covers_tree.selection()
+        if not selection:
+            return
+            
+        item_id = selection[0]
+        
+        # Cover-Daten finden
+        if item_id in self.cover_previews:
+            preview_data = self.cover_previews[item_id]
+            cover = preview_data['cover']
+            photo = preview_data['photo']
+            
+            # Vorschau-Bild aktualisieren
+            self.preview_label.config(image=photo, text="")
+            self.preview_label.image = photo  # Referenz behalten!
+            
+            # Details aktualisieren
+            type_map = {'internal': 'Intern (in MP3)', 'external': 'Extern (Datei)', 'url': 'Online (URL)'}
+            self.detail_labels['Typ:'].config(text=type_map.get(cover.type, cover.type))
+            self.detail_labels['Größe:'].config(text=f"{cover.size[0]} × {cover.size[1]} Pixel")
+            self.detail_labels['Format:'].config(text=cover.format or "Unbekannt")
+            
+            # Quelle kürzen falls zu lang
+            source_text = cover.path
+            if len(source_text) > 40:
+                source_text = "..." + source_text[-37:]
+            self.detail_labels['Quelle:'].config(text=source_text)
+        else:
+            # Fallback: Kein Vorschau verfügbar
+            self.preview_label.config(image="", text="Vorschau nicht verfügbar")
+            if hasattr(self.preview_label, 'image'):
+                delattr(self.preview_label, 'image')
+                
+            for label in self.detail_labels.values():
+                label.config(text="-")
     
     def select_cover(self):
         """Wählt das ausgewählte Cover aus"""
@@ -3000,24 +3340,59 @@ class CoverSelectionDialog:
             messagebox.showwarning("Warnung", "Bitte wählen Sie ein Cover aus.")
             return
             
-        # Index des ausgewählten Items
-        item = selection[0]
-        item_index = self.covers_tree.index(item)
+        print(f"🎯 Cover-Auswahl gestartet")
+        print(f"   Selection: {selection}")
         
-        if item_index < len(self.cover_info.unique_covers):
-            self.result = self.cover_info.unique_covers[item_index]
-            self.dialog.destroy()
+        # Cover aus Preview-Cache holen
+        item_id = selection[0]
+        print(f"   Item-ID: {item_id}")
+        print(f"   Preview-Cache-Keys: {list(self.cover_previews.keys())}")
+        
+        if item_id in self.cover_previews:
+            self.result = self.cover_previews[item_id]['cover']
+            print(f"✅ Cover aus Preview-Cache geladen:")
+            print(f"   Typ: {self.result.type}")
+            print(f"   Pfad: {self.result.path}")
+            print(f"   Größe: {self.result.size}")
         else:
-            messagebox.showerror("Fehler", "Ungültige Cover-Auswahl.")
+            # Fallback: Index-basierte Auswahl
+            print(f"⚠️ Fallback: Index-basierte Auswahl")
+            item_index = self.covers_tree.index(item_id)
+            print(f"   Item-Index: {item_index}")
+            print(f"   Verfügbare Cover: {len(self.cover_info.unique_covers) if self.cover_info else 0}")
+            
+            if self.cover_info and item_index < len(self.cover_info.unique_covers):
+                self.result = self.cover_info.unique_covers[item_index]
+                print(f"✅ Cover über Index-Fallback geladen:")
+                print(f"   Typ: {self.result.type}")
+                print(f"   Pfad: {self.result.path}")
+            else:
+                print(f"❌ Ungültige Cover-Auswahl")
+                messagebox.showerror("Fehler", "Ungültige Cover-Auswahl.")
+                return
+        
+        # Callback aufrufen falls vorhanden
+        if self.callback:
+            print(f"📞 Callback wird aufgerufen...")
+            self.callback(self.filepath, self.result)
+        
+        # Dialog schließen NACH erfolgreicher Auswahl
+        print(f"🏁 Dialog wird geschlossen mit Ergebnis: {self.result}")
+        self.dialog.destroy()
     
     def cancel(self):
         """Bricht die Auswahl ab"""
+        print("❌ Cover-Auswahl abgebrochen")
+        if self.callback:
+            self.callback(self.filepath, None)
         self.result = None
         self.dialog.destroy()
     
     def show(self):
         """Zeigt den Dialog und wartet auf Ergebnis"""
+        print(f"🎭 Cover-Dialog wird angezeigt für: {self.filename}")
         self.dialog.wait_window()
+        print(f"📤 Dialog-Ergebnis: {self.result}")
         return self.result
 
 def main():
